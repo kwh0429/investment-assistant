@@ -712,3 +712,104 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+
+/* =========================================================
+   [개선] 채팅 마크다운 렌더링 & 확장 채팅창 스타일
+   ========================================================= */
+
+.chat-box.tall-chat {
+    height: 460px;
+}
+
+.chat-msg.bot.md-body {
+    white-space: normal;
+    max-width: 94%;
+    padding: 14px 18px;
+}
+
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+    color: var(--text-main);
+    margin: 12px 0 6px;
+    line-height: 1.35;
+}
+
+.md-body h1:first-child,
+.md-body h2:first-child,
+.md-body h3:first-child,
+.md-body h4:first-child {
+    margin-top: 0;
+}
+
+.md-body h3 {
+    font-size: 1.05rem;
+    border-left: 4px solid var(--primary);
+    padding-left: 8px;
+}
+
+.md-body h4 {
+    font-size: 0.96rem;
+    color: #334155;
+}
+
+.md-body p {
+    margin: 6px 0;
+}
+
+.md-body ul,
+.md-body ol {
+    margin: 6px 0 10px 20px;
+}
+
+.md-body li {
+    margin-bottom: 4px;
+}
+
+.md-body strong {
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.md-body code {
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: Consolas, monospace;
+    font-size: 0.86em;
+    color: #0f172a;
+}
+
+.md-body hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 12px 0;
+}
+
+.md-body blockquote {
+    border-left: 3px solid #cbd5e1;
+    padding-left: 10px;
+    color: var(--text-muted);
+    margin: 8px 0;
+}
+
+.md-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 0.86rem;
+}
+
+.md-body th,
+.md-body td {
+    border: 1px solid var(--border-color);
+    padding: 6px 10px;
+    text-align: left;
+}
+
+.md-body th {
+    background: #f1f5f9;
+    font-weight: 700;
+}

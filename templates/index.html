@@ -48,12 +48,12 @@
                 <div class="panel-header">
                     <div>
                         <h2>💬 종목 심층분석 채팅 (Dify 챗봇①)</h2>
-                        <p class="section-desc">내부 도구(네이버 금융 JSON + Serper 뉴스)로 수집한 실제 근거를 챗봇에 전달해 분석합니다.</p>
+                        <p class="section-desc">종목코드를 조회하면 네이버 금융·Serper 뉴스 데이터를 수집해 전문가 프롬프트로 1차 분석하고, 그 근거로 대화를 이어갑니다.</p>
                     </div>
-                    <button type="button" id="resetAnalysisChatBtn" class="btn btn-secondary btn-sm">새 대화</button>
+                    <button type="button" id="resetAnalysisChatBtn" class="btn btn-secondary btn-sm">대화 초기화</button>
                 </div>
 
-                <div class="control-row">
+                <form id="analysisInitForm" class="control-row">
                     <input
                         type="text"
                         id="analysisCode"
@@ -66,43 +66,92 @@
                         <input type="checkbox" id="useToolCheck" checked>
                         <span>도구(네이버+Serper) 근거 사용</span>
                     </label>
-                </div>
+                    <button type="submit" id="analysisFetchBtn" class="btn btn-primary">종목 조회 및 분석</button>
+                </form>
                 <div class="quick-picks">
                     <span class="quick-label">예시 종목:</span>
                     <button type="button" class="chip analysis-chip" data-code="000660">SK하이닉스 (000660)</button>
                     <button type="button" class="chip analysis-chip" data-code="005930">삼성전자 (005930)</button>
                     <button type="button" class="chip analysis-chip" data-code="005380">현대차 (005380)</button>
+                    <button type="button" class="chip analysis-chip" data-code="035420">NAVER (035420)</button>
                 </div>
             </div>
 
-            <div class="split-layout">
-                <!-- 채팅 영역 -->
-                <div class="card chat-card">
-                    <h3>🤖 Dify 심층분석 챗봇</h3>
-                    <div id="analysisChatBox" class="chat-box">
-                        <div class="chat-msg bot">
-                            종목코드를 입력하고 질문을 보내보세요. 위의 '도구 근거 사용'을 끄면 도구 없는 AI와 차이를 비교할 수 있습니다!
-                        </div>
+            <div id="analysisLoading" class="loading-box hidden">
+                <div class="spinner"></div>
+                <span id="analysisLoadingText">데이터 수집 및 전문가 심층분석 리포트 작성 중...</span>
+            </div>
+
+            <!-- 수집된 실제 근거 대시보드 (/test 수준 이상 가독성) -->
+            <div id="analysisEvidenceCard" class="card hidden">
+                <div class="panel-header">
+                    <div>
+                        <h3>🔍 수집된 실제 근거 데이터 (네이버 금융 + Serper 뉴스)</h3>
+                        <p class="section-desc">아래 숫자와 기사를 근거로 Dify 챗봇①이 분석했습니다.</p>
                     </div>
-                    <form id="analysisChatForm" class="chat-form">
-                        <input
-                            type="text"
-                            id="analysisQuestion"
-                            class="search-input"
-                            placeholder="예: 현재 PER/PBR 수준과 최근 실적, 최신 뉴스를 종합 분석해줘"
-                        >
-                        <button type="submit" id="analysisSendBtn" class="btn btn-primary">전송</button>
-                    </form>
+                    <button type="button" id="toggleEvidenceBtn" class="btn btn-secondary btn-sm">접기/펼치기</button>
                 </div>
 
-                <!-- 수집된 근거 뷰어 -->
-                <div class="card evidence-card">
-                    <h3>🔍 백엔드가 수집한 실제 근거 (JSON 요약)</h3>
-                    <p class="section-desc">AI에게 전달된 네이버 시세·실적·뉴스 원본입니다.</p>
-                    <div id="evidencePanel" class="evidence-panel">
-                        <p class="muted-text">질문을 전송하면 수집된 근거 데이터가 여기에 표시됩니다.</p>
+                <div id="evidenceBody">
+                    <div class="stock-header">
+                        <div>
+                            <span id="evCodeBadge" class="code-badge">-</span>
+                            <h2 id="evStockName" class="stock-name">-</h2>
+                        </div>
+                        <div class="price-box">
+                            <span id="evCurrentPrice" class="current-price">-</span>
+                            <span id="evChangeRate" class="change-rate">-</span>
+                        </div>
+                    </div>
+
+                    <div class="grid-divider">1구역 · 당일 시세 정보</div>
+                    <div id="evQuoteGrid" class="metrics-grid"></div>
+
+                    <div class="grid-divider">2구역 · 핵심 투자정보 (밸류에이션 &amp; 수급)</div>
+                    <div id="evInvestGrid" class="metrics-grid"></div>
+
+                    <div class="grid-divider" style="margin-top: 22px;">
+                        3구역 · 기업실적분석 (연간 재무제표 · <span class="consensus-badge">예상(E)</span> 추정치 구분)
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="evFinancialsTable" class="financials-table">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+
+                    <div class="grid-divider" style="margin-top: 22px;">📰 최신 관련 뉴스 (Serper News)</div>
+                    <ul id="evNewsList" class="news-list"></ul>
+                </div>
+            </div>
+
+            <!-- Dify 챗봇① 대화 영역 -->
+            <div class="card chat-card">
+                <div class="panel-header">
+                    <div>
+                        <h3>🤖 Dify 심층분석 채팅 (근거 기반 후속 질의응답)</h3>
+                        <p class="section-desc">위에서 조회한 종목 데이터와 1차 리포트를 기억한 상태로 대화가 이어집니다.</p>
                     </div>
                 </div>
+                <div id="analysisChatBox" class="chat-box tall-chat">
+                    <div class="chat-msg bot">
+                        종목코드를 입력하고 <strong>'종목 조회 및 분석'</strong> 버튼을 눌러주세요. 데이터 수집 후 전문가 심층분석 리포트가 여기에 표시됩니다.
+                    </div>
+                </div>
+                <div class="quick-picks" style="margin-bottom: 10px;">
+                    <button type="button" class="chip analysis-q-chip" data-q="방금 분석한 내용 중 가장 주의해야 할 리스크 요인 3가지를 짚어줘">리스크 3가지</button>
+                    <button type="button" class="chip analysis-q-chip" data-q="현재 PER과 추정 PER의 차이를 바탕으로 향후 실적 기대감을 설명해줘">밸류에이션(PER) 해석</button>
+                    <button type="button" class="chip analysis-q-chip" data-q="수집된 최신 뉴스들이 이 종목에 미치는 핵심 영향은 무엇인가요?">최신 뉴스 영향</button>
+                </div>
+                <form id="analysisChatForm" class="chat-form">
+                    <input
+                        type="text"
+                        id="analysisQuestion"
+                        class="search-input"
+                        placeholder="조회된 종목에 대해 궁금한 점을 이어서 질문해 보세요..."
+                    >
+                    <button type="submit" id="analysisSendBtn" class="btn btn-primary">전송</button>
+                </form>
             </div>
         </section>
 

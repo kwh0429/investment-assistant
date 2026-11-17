@@ -247,46 +247,90 @@ def api_technical():
 def api_chat_analysis():
     """
     [탭 1] 종목 심층분석 채팅 (Dify 챗봇① 연결)
-    - use_tool=True: collector.py로 네이버+Serper 근거를 수집해 Dify 챗봇①에 주입
-    - use_tool=False: 근거 없이 질문만 전달 (도구 없는 AI 비교용)
+    - action="init": 종목코드 수집(collector.py) + 전문가 애널리스트 프롬프트로 1차 종합 분석 생성
+    - action="chat": 열린 conversation_id를 유지하며 후속 질문 이어가기
     """
     try:
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({"error": "요청 형식이 올바르지 않습니다 (JSON 필요)."}), 400
 
+        action = str(payload.get("action", "init")).strip()
         code = str(payload.get("code", "")).strip()
-        question = str(payload.get("question", "")).strip() or "이 종목의 현재 재무, 밸류에이션, 최신 뉴스를 종합해 객관적으로 분석해 주세요."
+        question = str(payload.get("question", "")).strip()
         use_tool = bool(payload.get("use_tool", True))
-        conversation_id = str(payload.get("conversation_id", "")).strip()
+        conversation_id = str(payload.get("conversation_id") or "").strip()
 
-        logger.info(f"[REQUEST] POST /api/chat/analysis code={code}, use_tool={use_tool}")
+        logger.info(f"[REQUEST] POST /api/chat/analysis action={action}, code={code}, use_tool={use_tool}")
 
         evidence = None
         collect_errors = []
 
-        if use_tool:
+        if action == "init":
             if not code:
-                return jsonify({"error": "근거 데이터를 수집할 종목코드 6자리를 입력해 주세요."}), 400
+                return jsonify({"error": "종목코드 6자리를 입력해 주세요."}), 400
 
-            evidence = collect_stock_data(code)
-            collect_errors = evidence.get("errors", [])
-            if not evidence.get("name") and not evidence.get("snapshot") and collect_errors:
-                return jsonify({"error": collect_errors[0], "evidence": evidence}), 400
+            if use_tool:
+                evidence = collect_stock_data(code)
+                collect_errors = evidence.get("errors", [])
+                if not evidence.get("name") and not evidence.get("snapshot") and collect_errors:
+                    return jsonify({"error": collect_errors[0], "evidence": evidence}), 400
 
-            full_query = (
-                "[수집된 종목 근거 데이터 (네이버 금융 JSON & Serper 뉴스)]\n"
-                f"{json.dumps(evidence, ensure_ascii=False)}\n\n"
-                "[지침]\n"
-                "반드시 위 근거 데이터에 포함된 수치와 뉴스만을 사용하여 객관적으로 답변하세요. "
-                "데이터에 없는 숫자를 지어내지 말고, is_consensus가 true인 실적은 '예상치'임을 명확히 구분하세요.\n\n"
-                f"[사용자 질문]\n{question}"
-            )
+                stock_name = evidence.get("name") or code
+                full_query = (
+                    f"당신은 사용자 전담 개인 PB(Private Banker)입니다. 아래 제공된 '{stock_name}({code})'의 "
+                    "실제 수집 데이터(JSON)만을 근거로, 고객을 위한 명확하고 실전적인 심층분석 리포트와 투자 전략을 작성해 주세요.\n\n"
+                    "[개인 PB 작성 원칙]\n"
+                    "1. '투자는 본인 책임', '상황에 따라 다릅니다' 같은 원론적이고 회피성 멘트는 절대 쓰지 마세요.\n"
+                    "2. 데이터에 기반해 현재 포지션 의견(예: 비중 확대 / 보유 유지 / 분할 익절 / 관망 / 손절 주의)을 명확히 제시하세요.\n"
+                    "3. 주요 지지선(52주 최저·단기 저점)과 저항선(전고점 등)을 기준으로 구체적인 대응 전략을 제안하세요.\n"
+                    "4. 연간 실적에서 `is_consensus: true`인 연도는 확정 실적이 아닌 '증권사 예상치(E)'임을 반드시 구분해 서술하세요.\n"
+                    "5. 금액은 조/억 단위로 환산하고, 표·글머리 기호 등 깔끔한 마크다운으로 정리하세요.\n\n"
+                    "[필수 분석 목차]\n"
+                    "### 1. PB 종합 의견 (현재 스탠스 및 핵심 이유 1줄 요약)\n"
+                    "### 2. 기업 체급 및 시장 수급 (시가총액, 52주 위치, 외국인 소진율, 거래대금)\n"
+                    "### 3. 실적 성장성과 수익성 (매출·영업이익 추이, 영업이익률, ROE 변화)\n"
+                    "### 4. 밸류에이션 및 재무 건전성 (현재 PER vs 추정 PER, PBR, 부채비율, 배당)\n"
+                    "### 5. 최신 뉴스 핵심 이슈 및 구체적 대응 전략\n\n"
+                    f"[수집된 근거 데이터 JSON]\n{json.dumps(evidence, ensure_ascii=False)}"
+                )
+            else:
+                full_query = (
+                    f"당신은 개인 전담 PB입니다. 종목코드 '{code}'에 대해 "
+                    "명확한 투자 스탠스, 실적 흐름, 밸류에이션, 대응 전략을 5가지 목차로 단호하게 분석해 주세요."
+                )
+
+            # 새 분석 세션 시작 (conversation_id 초기화)
+            dify_res = call_dify_chatbot("analysis", full_query, conversation_id="")
+
         else:
-            target_label = f"종목코드 {code}" if code else "해당 종목"
-            full_query = f"{target_label}에 대해 질문합니다: {question}"
+            # 후속 채팅 (기존 conversation_id 유지 + 개인 PB 판단 지침 적용)
+            if not question:
+                return jsonify({"error": "질문 내용을 입력해 주세요."}), 400
 
-        dify_res = call_dify_chatbot("analysis", full_query, conversation_id=conversation_id)
+            pb_directive = (
+                "\n\n[개인 PB 응답 원칙]\n"
+                "당신은 이 사용자의 개인 전담 PB(테스트 전용)입니다. "
+                "'최종 결정은 본인이 내리세요', '장단점이 모두 있습니다' 같은 애매한 양비론으로 회피하지 마세요. "
+                "수집된 종목 데이터와 사용자가 말한 평단가/상황을 직접 계산해, "
+                "첫 문장에서 명확한 행동 결론(예: 보유 유지, 분할 매수, 반등 시 비중 축소, 손절 등)을 단호하게 내린 뒤, "
+                "구체적인 수치 근거와 기준 가격(목표가/손절가 라인)을 설명하세요."
+            )
+
+            if not conversation_id and use_tool and code:
+                # '조회'를 누르지 않고 바로 질문한 경우에도 근거 수집 후 PB 프롬프트 적용
+                evidence = collect_stock_data(code)
+                collect_errors = evidence.get("errors", [])
+                full_query = (
+                    f"[근거 데이터 JSON]\n{json.dumps(evidence, ensure_ascii=False)}\n\n"
+                    f"[사용자 질문]\n{question}"
+                    f"{pb_directive}"
+                )
+            else:
+                full_query = f"{question}{pb_directive}"
+
+            dify_res = call_dify_chatbot("analysis", full_query, conversation_id=conversation_id)
+
         if dify_res.get("error"):
             return jsonify({
                 "error": dify_res["error"],
@@ -294,7 +338,7 @@ def api_chat_analysis():
                 "collect_errors": collect_errors,
             }), 502 if "API Key" not in dify_res["error"] else 400
 
-        logger.info(f"[RESPONSE] 탭1 심층분석 채팅 완료 (code={code}, use_tool={use_tool})")
+        logger.info(f"[RESPONSE] 탭1 심층분석 완료 (action={action}, code={code}, use_tool={use_tool})")
         return jsonify({
             "answer": dify_res["answer"],
             "conversation_id": dify_res["conversation_id"],
@@ -321,7 +365,7 @@ def api_chat_technical():
 
         code = str(payload.get("code", "")).strip()
         question = str(payload.get("question", "")).strip() or "현재 계산된 이동평균선, RSI, MACD, 볼린저밴드 수치를 초보자가 이해하기 쉽게 설명해 주세요."
-        conversation_id = str(payload.get("conversation_id", "")).strip()
+        conversation_id = str(payload.get("conversation_id") or "").strip()
         summary = payload.get("latest_summary")
 
         logger.info(f"[REQUEST] POST /api/chat/technical code={code}")
