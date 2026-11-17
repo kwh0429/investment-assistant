@@ -1,0 +1,459 @@
+/* 기본 리셋 & 변수 */
+:root {
+    --bg-color: #f4f6f9;
+    --card-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --ai-accent: #7c3aed;
+    --ai-hover: #6d28d9;
+    --up-color: #dc2626;     /* 한국 증시: 상승 빨강 */
+    --down-color: #2563eb;   /* 한국 증시: 하락 파랑 */
+    --consensus-bg: #fef3c7;
+    --consensus-text: #b45309;
+    --error-bg: #fef2f2;
+    --error-border: #fecaca;
+    --error-text: #b91c1c;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1020px;
+    margin: 0 auto;
+    padding: 28px 18px 60px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* 헤더 */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.header-title h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    margin-top: 4px;
+}
+
+.health-badge {
+    font-size: 0.82rem;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.health-badge.ok {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.health-badge.warn {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+/* 카드 공통 */
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+/* 검색 영역 */
+.search-form {
+    display: flex;
+    gap: 10px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 1rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 10px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.search-input:focus {
+    border-color: var(--primary);
+}
+
+.btn {
+    padding: 12px 22px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+}
+
+.btn-ai {
+    background: var(--ai-accent);
+    color: #ffffff;
+}
+
+.btn-ai:hover:not(:disabled) {
+    background: var(--ai-hover);
+}
+
+.quick-picks {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.quick-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.chip {
+    background: #f1f5f9;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 0.82rem;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.chip:hover {
+    background: #e2e8f0;
+}
+
+/* 로딩 & 에러 */
+.loading-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 22px;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 20px;
+    font-weight: 500;
+    color: var(--primary);
+}
+
+.spinner {
+    width: 22px;
+    height: 22px;
+    border: 3px solid #dbeafe;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.spinner.small {
+    width: 16px;
+    height: 16px;
+    border-width: 2.5px;
+    border-top-color: var(--ai-accent);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-box {
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
+    color: var(--error-text);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    font-size: 0.92rem;
+}
+
+.error-box ul {
+    margin-top: 6px;
+    padding-left: 20px;
+}
+
+/* 스냅샷 헤더 */
+.stock-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 16px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.code-badge {
+    display: inline-block;
+    font-size: 0.82rem;
+    font-weight: 700;
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 3px 9px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+}
+
+.stock-name {
+    font-size: 1.7rem;
+    font-weight: 800;
+}
+
+.price-box {
+    text-align: right;
+}
+
+.current-price {
+    display: block;
+    font-size: 1.8rem;
+    font-weight: 800;
+}
+
+.change-rate {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.up { color: var(--up-color); }
+.down { color: var(--down-color); }
+.flat { color: var(--text-muted); }
+
+/* 지표 그리드 */
+.grid-divider {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin: 16px 0 10px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 12px;
+}
+
+.metric-item {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.metric-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+/* AI 브리핑 구역 */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.section-header h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.section-desc {
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.brief-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px;
+    background: #f5f3ff;
+    color: var(--ai-accent);
+    border-radius: 10px;
+    font-size: 0.92rem;
+    font-weight: 500;
+}
+
+.brief-content {
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    border-radius: 12px;
+    padding: 18px 20px;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+}
+
+/* 기업실적분석 테이블 */
+.consensus-badge {
+    display: inline-block;
+    background: var(--consensus-bg);
+    color: var(--consensus-text);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 5px;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+}
+
+.financials-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    text-align: right;
+}
+
+.financials-table th,
+.financials-table td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.financials-table th:first-child,
+.financials-table td:first-child {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.financials-table thead th {
+    background: #f8fafc;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.financials-table th.consensus-col,
+.financials-table td.consensus-col {
+    background-color: #fffbeb;
+}
+
+.neg-val {
+    color: var(--down-color);
+    font-weight: 600;
+}
+
+/* 뉴스 리스트 */
+.news-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.news-item {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.news-item:hover {
+    border-color: var(--primary);
+    background-color: #f8fafc;
+}
+
+.news-title {
+    display: block;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    text-decoration: none;
+    margin-bottom: 6px;
+}
+
+.news-title:hover {
+    color: var(--primary);
+    text-decoration: underline;
+}
+
+.news-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    display: flex;
+    gap: 10px;
+}
+
+.news-desc {
+    font-size: 0.88rem;
+    color: #475569;
+    margin-top: 6px;
+}
+
+@media (max-width: 600px) {
+    .search-form {
+        flex-direction: column;
+    }
+    .price-box {
+        text-align: left;
+    }
+}
