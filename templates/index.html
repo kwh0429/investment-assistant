@@ -3,120 +3,277 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Data Collector &amp; AI Briefing Tool</title>
+    <title>나의 투자도우미 (My Investment Assistant)</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
-        <!-- 헤더 -->
+        <!-- 상단 헤더 -->
         <header class="header">
             <div class="header-title">
-                <h1>📈 Stock Data Collector &amp; AI Briefing</h1>
-                <p class="subtitle">네이버 금융 JSON 수집 + Serper 최신 뉴스 + Gemini AI 객관적 브리핑</p>
+                <h1>📈 나의 투자도우미 (My Investment Assistant)</h1>
+                <p class="subtitle">근거 기반 Dify 심층분석 · 파이썬 몬테카를로 리밸런싱 · FDR 기술지표 AI 설명</p>
             </div>
-            <div id="healthBadge" class="health-badge">서버 상태 확인 중...</div>
+            <div class="header-actions">
+                <a href="/test" class="btn-link">🧪 1차 수집기(/test)</a>
+                <div id="healthBadge" class="health-badge">서버 상태 확인 중...</div>
+            </div>
         </header>
 
-        <!-- 검색 섹션 -->
-        <section class="search-section card">
-            <form id="searchForm" class="search-form">
-                <input
-                    type="text"
-                    id="stockCodeInput"
-                    class="search-input"
-                    placeholder="종목코드 6자리 입력 (예: 000660)"
-                    maxlength="6"
-                    autocomplete="off"
-                >
-                <button type="submit" id="searchBtn" class="btn btn-primary">데이터 수집</button>
-            </form>
-            <div class="quick-picks">
-                <span class="quick-label">빠른 예시:</span>
-                <button type="button" class="chip" data-code="000660">SK하이닉스 (000660)</button>
-                <button type="button" class="chip" data-code="005930">삼성전자 (005930)</button>
-                <button type="button" class="chip" data-code="005380">현대차 (005380)</button>
-                <button type="button" class="chip" data-code="035420">NAVER (035420)</button>
+        <!-- 3탭 내비게이션 -->
+        <nav class="tabs-nav">
+            <button type="button" class="tab-btn active" data-tab="analysis">
+                💬 탭 1. 종목 심층분석 채팅
+            </button>
+            <button type="button" class="tab-btn" data-tab="rebalance">
+                ⚖️ 탭 2. 리밸런싱 도우미
+            </button>
+            <button type="button" class="tab-btn" data-tab="technical">
+                📊 탭 3. 기술지표 차트 + 채팅
+            </button>
+        </nav>
+
+        <!-- 공용 오류 배너 -->
+        <div id="globalErrorBox" class="error-box hidden">
+            <strong>⚠️ 확인이 필요한 사항:</strong>
+            <ul id="globalErrorList"></ul>
+        </div>
+
+        <!-- =======================================================
+             탭 1: 종목 심층분석 채팅 (collector.py + Dify 챗봇①)
+             ======================================================= -->
+        <section id="tab-analysis" class="tab-panel active">
+            <div class="card">
+                <div class="panel-header">
+                    <div>
+                        <h2>💬 종목 심층분석 채팅 (Dify 챗봇①)</h2>
+                        <p class="section-desc">내부 도구(네이버 금융 JSON + Serper 뉴스)로 수집한 실제 근거를 챗봇에 전달해 분석합니다.</p>
+                    </div>
+                    <button type="button" id="resetAnalysisChatBtn" class="btn btn-secondary btn-sm">새 대화</button>
+                </div>
+
+                <div class="control-row">
+                    <input
+                        type="text"
+                        id="analysisCode"
+                        class="search-input"
+                        placeholder="종목코드 6자리 입력 (예: 000660)"
+                        maxlength="6"
+                        value="000660"
+                    >
+                    <label class="toggle-label">
+                        <input type="checkbox" id="useToolCheck" checked>
+                        <span>도구(네이버+Serper) 근거 사용</span>
+                    </label>
+                </div>
+                <div class="quick-picks">
+                    <span class="quick-label">예시 종목:</span>
+                    <button type="button" class="chip analysis-chip" data-code="000660">SK하이닉스 (000660)</button>
+                    <button type="button" class="chip analysis-chip" data-code="005930">삼성전자 (005930)</button>
+                    <button type="button" class="chip analysis-chip" data-code="005380">현대차 (005380)</button>
+                </div>
+            </div>
+
+            <div class="split-layout">
+                <!-- 채팅 영역 -->
+                <div class="card chat-card">
+                    <h3>🤖 Dify 심층분석 챗봇</h3>
+                    <div id="analysisChatBox" class="chat-box">
+                        <div class="chat-msg bot">
+                            종목코드를 입력하고 질문을 보내보세요. 위의 '도구 근거 사용'을 끄면 도구 없는 AI와 차이를 비교할 수 있습니다!
+                        </div>
+                    </div>
+                    <form id="analysisChatForm" class="chat-form">
+                        <input
+                            type="text"
+                            id="analysisQuestion"
+                            class="search-input"
+                            placeholder="예: 현재 PER/PBR 수준과 최근 실적, 최신 뉴스를 종합 분석해줘"
+                        >
+                        <button type="submit" id="analysisSendBtn" class="btn btn-primary">전송</button>
+                    </form>
+                </div>
+
+                <!-- 수집된 근거 뷰어 -->
+                <div class="card evidence-card">
+                    <h3>🔍 백엔드가 수집한 실제 근거 (JSON 요약)</h3>
+                    <p class="section-desc">AI에게 전달된 네이버 시세·실적·뉴스 원본입니다.</p>
+                    <div id="evidencePanel" class="evidence-panel">
+                        <p class="muted-text">질문을 전송하면 수집된 근거 데이터가 여기에 표시됩니다.</p>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <!-- 로딩 / 오류 배너 -->
-        <div id="loadingBox" class="loading-box hidden">
-            <div class="spinner"></div>
-            <span id="loadingText">데이터를 수집하고 있습니다...</span>
-        </div>
-
-        <div id="errorBox" class="error-box hidden">
-            <strong>⚠️ 확인이 필요한 사항:</strong>
-            <ul id="errorList"></ul>
-        </div>
-
-        <!-- 결과 대시보드 (수집 후 표시) -->
-        <main id="dashboard" class="dashboard hidden">
-            <!-- 1. 종목 메인 헤더 & 1구역/2구역 스냅샷 카드 -->
-            <section class="card snapshot-section">
-                <div class="stock-header">
+        <!-- =======================================================
+             탭 2: 리밸런싱 도우미 (Dify 없음 · 순수 Python 계산)
+             ======================================================= -->
+        <section id="tab-rebalance" class="tab-panel">
+            <div class="card">
+                <div class="panel-header">
                     <div>
-                        <span id="stockCodeBadge" class="code-badge">000660</span>
-                        <h2 id="stockName" class="stock-name">종목명</h2>
-                    </div>
-                    <div class="price-box">
-                        <span id="currentPrice" class="current-price">-</span>
-                        <span id="changeRate" class="change-rate">-</span>
+                        <h2>⚖️ 리밸런싱 도우미 (순수 Python 몬테카를로)</h2>
+                        <p class="section-desc">AI 감이 아닌 최근 1년 주가 데이터(FinanceDataReader)와 3,000회 몬테카를로 시뮬레이션으로 최적 비중을 계산합니다.</p>
                     </div>
                 </div>
 
-                <div class="grid-divider">1구역 · 당일 시세 정보</div>
-                <div id="quoteGrid" class="metrics-grid"></div>
+                <form id="rebalanceForm" class="search-form">
+                    <input
+                        type="text"
+                        id="rebalanceTickers"
+                        class="search-input"
+                        placeholder="종목/ETF 코드 2개 이상을 쉼표(,)로 구분해 입력 (예: 005930, 000660, 069500)"
+                        value="005930, 000660, 069500"
+                    >
+                    <button type="submit" id="rebalanceBtn" class="btn btn-primary">최적 비중 계산</button>
+                </form>
+                <div class="quick-picks">
+                    <span class="quick-label">포트폴리오 예시:</span>
+                    <button type="button" class="chip rebalance-chip" data-tickers="005930, 000660, 069500">반도체+코스피200</button>
+                    <button type="button" class="chip rebalance-chip" data-tickers="069500, 360750, 148070">코스피+S&amp;P500+국채10년</button>
+                </div>
+            </div>
 
-                <div class="grid-divider">2구역 · 핵심 투자정보 (밸류에이션 &amp; 수급)</div>
-                <div id="investGrid" class="metrics-grid"></div>
-            </section>
+            <div id="rebalanceLoading" class="loading-box hidden">
+                <div class="spinner"></div>
+                <span>최근 1년 주가 수집 및 3,000회 몬테카를로 시뮬레이션 계산 중...</span>
+            </div>
 
-            <!-- 2. Gemini AI 브리핑 구역 -->
-            <section class="card briefing-section">
-                <div class="section-header">
+            <div id="rebalanceResult" class="hidden">
+                <!-- 최적 포트폴리오 수치 요약 -->
+                <div class="card">
+                    <h3>🏆 최대 샤프지수(효율적 프론티어) 최적 포트폴리오</h3>
+                    <div id="rebalanceSummaryGrid" class="metrics-grid"></div>
+                </div>
+
+                <!-- 비중 파이 차트 & 효율적 프론티어 산점도 -->
+                <div class="charts-grid">
+                    <div class="card">
+                        <h3>🥧 권장 투자 비중</h3>
+                        <div class="chart-container">
+                            <canvas id="weightChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>📈 효율적 프론티어 (위험 vs 기대수익률)</h3>
+                        <div class="chart-container">
+                            <canvas id="frontierChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 개별 종목 위험/수익 통계 -->
+                <div class="card">
+                    <h3>📋 개별 종목 최근 1년 통계</h3>
+                    <div class="table-wrapper">
+                        <table id="assetStatsTable" class="financials-table">
+                            <thead>
+                                <tr>
+                                    <th>종목코드</th>
+                                    <th>권장 비중</th>
+                                    <th>연율화 수익률</th>
+                                    <th>연율화 변동성</th>
+                                    <th>샤프지수</th>
+                                    <th>최대낙폭 (MDD)</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =======================================================
+             탭 3: 기술지표 차트 + 채팅 (FDR 계산 + Dify 챗봇③)
+             ======================================================= -->
+        <section id="tab-technical" class="tab-panel">
+            <div class="card">
+                <div class="panel-header">
                     <div>
-                        <h3>🤖 Gemini AI 객관적 종목 브리핑</h3>
-                        <p class="section-desc">수집된 숫자와 뉴스를 바탕으로 AI가 초보자 눈높이에 맞춰 정리해 드립니다.</p>
+                        <h2>📊 기술지표 차트 + AI 해석 (Dify 챗봇③)</h2>
+                        <p class="section-desc">FinanceDataReader로 MA·RSI·MACD·볼린저밴드를 직접 계산해 차트로 그리고, 계산된 숫자를 챗봇③에 주입해 설명합니다.</p>
                     </div>
-                    <button type="button" id="briefBtn" class="btn btn-ai">AI 브리핑 생성</button>
                 </div>
-                <div id="briefLoading" class="brief-loading hidden">
-                    <div class="spinner small"></div>
-                    <span>Gemini 3.8 Flash가 데이터를 분석 중입니다...</span>
-                </div>
-                <div id="briefContent" class="brief-content hidden"></div>
-            </section>
 
-            <!-- 3. 3구역 기업실적분석 표 -->
-            <section class="card financials-section">
-                <div class="section-header">
-                    <div>
-                        <h3>📊 3구역 · 기업실적분석 (연간 재무제표)</h3>
-                        <p class="section-desc">
-                            <span class="consensus-badge">예상(E)</span> 표시는 확정 실적이 아닌 증권사 컨센서스(추정치)입니다.
-                        </p>
-                    </div>
+                <form id="techSearchForm" class="search-form">
+                    <input
+                        type="text"
+                        id="techCode"
+                        class="search-input"
+                        placeholder="종목코드 6자리 입력 (예: 000660)"
+                        maxlength="6"
+                        value="000660"
+                    >
+                    <button type="submit" id="techSearchBtn" class="btn btn-primary">차트 &amp; 지표 계산</button>
+                </form>
+                <div class="quick-picks">
+                    <span class="quick-label">예시 종목:</span>
+                    <button type="button" class="chip tech-chip" data-code="000660">SK하이닉스 (000660)</button>
+                    <button type="button" class="chip tech-chip" data-code="005930">삼성전자 (005930)</button>
+                    <button type="button" class="chip tech-chip" data-code="035420">NAVER (035420)</button>
                 </div>
-                <div class="table-wrapper">
-                    <table id="financialsTable" class="financials-table">
-                        <thead></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </section>
+            </div>
 
-            <!-- 4. 최신 뉴스 리스트 구역 -->
-            <section class="card news-section">
-                <div class="section-header">
-                    <div>
-                        <h3>📰 관련 최신 뉴스 (Serper News)</h3>
-                        <p class="section-desc">네이버에서 확보한 정식 종목명으로 검색한 최신 뉴스입니다.</p>
+            <div id="techLoading" class="loading-box hidden">
+                <div class="spinner"></div>
+                <span>주가 데이터 수집 및 기술지표 계산 중...</span>
+            </div>
+
+            <div id="techResult" class="hidden">
+                <!-- 최신 지표 요약 카드 -->
+                <div class="card">
+                    <h3>📌 최신 기술지표 계산 결과 (Dify 챗봇③ 주입 데이터)</h3>
+                    <div id="techSummaryGrid" class="metrics-grid"></div>
+                </div>
+
+                <!-- 차트 영역 -->
+                <div class="charts-grid">
+                    <div class="card">
+                        <h3>📈 주가 + 이동평균선(5/20/60) + 볼린저밴드</h3>
+                        <div class="chart-container tall">
+                            <canvas id="priceTechChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>📉 RSI (14일) 추이 (과매수 70 / 과매도 30)</h3>
+                        <div class="chart-container tall">
+                            <canvas id="rsiChart"></canvas>
+                        </div>
                     </div>
                 </div>
-                <ul id="newsList" class="news-list"></ul>
-            </section>
-        </main>
+
+                <!-- 기술지표 설명 전용 Dify 챗봇③ -->
+                <div class="card chat-card">
+                    <div class="panel-header">
+                        <div>
+                            <h3>🤖 기술지표 설명 전용 챗봇 (Dify 챗봇③)</h3>
+                            <p class="section-desc">질문 시 위에 계산된 최신 숫자(latest_summary)가 보이지 않게 자동 주입됩니다.</p>
+                        </div>
+                        <button type="button" id="resetTechChatBtn" class="btn btn-secondary btn-sm">새 대화</button>
+                    </div>
+                    <div id="techChatBox" class="chat-box">
+                        <div class="chat-msg bot">
+                            차트와 기술지표 계산이 완료되었습니다! 현재 RSI, 이동평균선, 볼린저밴드 상태가 궁금하시면 질문해 보세요.
+                        </div>
+                    </div>
+                    <div class="quick-picks" style="margin-bottom: 10px;">
+                        <button type="button" class="chip tech-q-chip" data-q="현재 RSI와 볼린저밴드 위치를 초보자 눈높이에서 설명해줘">RSI &amp; 볼린저밴드 해석</button>
+                        <button type="button" class="chip tech-q-chip" data-q="이동평균선(5/20/60) 배열과 MACD 추세를 설명해줘">이평선 &amp; MACD 추세</button>
+                    </div>
+                    <form id="techChatForm" class="chat-form">
+                        <input
+                            type="text"
+                            id="techQuestion"
+                            class="search-input"
+                            placeholder="예: 지금 이동평균선 정배열인지 역배열인지 쉽게 설명해줘"
+                        >
+                        <button type="submit" id="techSendBtn" class="btn btn-ai">설명 요청</button>
+                    </form>
+                </div>
+            </div>
+        </section>
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
