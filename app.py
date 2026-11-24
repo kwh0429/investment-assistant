@@ -44,15 +44,17 @@ def health():
     gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     dify_analysis_key = os.getenv("DIFY_ANALYSIS_API_KEY", "").strip()
     dify_tech_key = os.getenv("DIFY_TECH_API_KEY", "").strip()
+    dart_key = os.getenv("DART_API_KEY", "").strip()
 
     is_serper_ready = bool(serper_key)
     is_gemini_ready = bool(gemini_key)
     is_dify_analysis_ready = bool(dify_analysis_key)
     is_dify_tech_ready = bool(dify_tech_key)
+    is_dart_ready = bool(dart_key)
 
     logger.info(
         f"[HEALTH] 상태 점검 요청 - Serper: {is_serper_ready}, Gemini: {is_gemini_ready}, "
-        f"Dify분석: {is_dify_analysis_ready}, Dify기술: {is_dify_tech_ready}"
+        f"Dify분석: {is_dify_analysis_ready}, Dify기술: {is_dify_tech_ready}, DART: {is_dart_ready}"
     )
 
     return jsonify({
@@ -62,6 +64,7 @@ def health():
         "gemini_model": gemini_model,
         "dify_analysis_api_configured": is_dify_analysis_ready,
         "dify_tech_api_configured": is_dify_tech_ready,
+        "dart_api_configured": is_dart_ready,
     }), 200
 
 
@@ -305,6 +308,7 @@ def api_chat_analysis():
                 "financials": ev.get("financials"),
                 "quarter_financials": (ev.get("quarter_financials") or [])[-4:],
                 "ezinit_analysis": ev.get("ezinit_analysis"),
+                "dart_disclosures": ev.get("dart_disclosures"),
                 "news": [{"title": n.get("title"), "source": n.get("source"), "published": n.get("published")} for n in (ev.get("news") or [])],
             }
 

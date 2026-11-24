@@ -1,6 +1,10 @@
 import os
 import re
+import io
+import zipfile
 import logging
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 import requests
 from bs4 import BeautifulSoup
@@ -13,6 +17,11 @@ NAVER_INDEX_BASE = "https://m.stock.naver.com/api/index"
 NAVER_AC_URL = "https://ac.stock.naver.com/ac"
 SERPER_NEWS_URL = "https://google.serper.dev/news"
 EZINIT_ANALYSIS_URL = "https://portfolio.ezinit.com/community/stock_analysis"
+DART_CORP_CODE_URL = "https://opendart.fss.or.kr/api/corpCode.xml"
+DART_LIST_URL = "https://opendart.fss.or.kr/api/list.json"
+
+# OpenDART 종목코드 -> 고유번호(8자리) 메모리 캐시
+_DART_CORP_CACHE = {}
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -507,6 +516,96 @@ def resolve_stock_code(query):
         return None, f"종목명 검색 중 오류가 발생했습니다: {e}"
 
 
+def _get_dart_corp_map(dart_key):
+    """OpenDART 전체 고유번호(CORPCODE.xml)를 1회 다운로드하여 stock_code -> corp_code 매핑 캐싱"""
+    global _DART_CORP_CACHE
+    if _DART_CORP_CACHE:
+        return _DART_CORP_CACHE
+
+    logger.info("[DART] OpenDART 고유번호(corpCode) 매핑표 다운로드 시작")
+    try:
+        resp = requests.get(DART_CORP_CODE_URL, params={"crtfc_key": dart_key}, timeout=15)
+        if resp.status_code != 200:
+            logger.warning(f"[DART] corpCode.xml 다운로드 실패 ({resp.status_code})")
+            return {}
+
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            xml_name = zf.namelist()[0]
+            with zf.open(xml_name) as f:
+                tree = ET.parse(f)
+                root = tree.getroot()
+                mapping = {}
+                for el in root.findall("list"):
+                    stock_cd = (el.findtext("stock_code") or "").strip()
+                    corp_cd = (el.findtext("corp_code") or "").strip()
+                    if stock_cd and corp_cd:
+                        mapping[stock_cd] = corp_cd
+                _DART_CORP_CACHE = mapping
+                logger.info(f"[DART] 고유번호 매핑 캐시 완료 (상장사 {len(mapping)}개)")
+                return _DART_CORP_CACHE
+    except Exception as e:
+        logger.warning(f"[DART] 고유번호 매핑 실패: {e}")
+        return {}
+
+
+def fetch_dart_disclosures(code):
+    """
+    금융감독원 OpenDART API(/api/list.json)에서 최근 90일 공식 공시 최대 8건을 조회한다.
+    DART_API_KEY 미설정 또는 비상장/ETF 종목인 경우 빈 리스트 반환.
+    """
+    dart_key = os.getenv("DART_API_KEY", "").strip()
+    if not dart_key:
+        return []
+
+    corp_map = _get_dart_corp_map(dart_key)
+    corp_code = corp_map.get(code)
+    if not corp_code:
+        logger.info(f"[DART] '{code}'에 해당하는 DART 상장사 고유번호가 없습니다 (ETF 등).")
+        return []
+
+    bgn_de = (datetime.now() - timedelta(days=90)).strftime("%Y%m%d")
+    logger.info(f"[DART] OpenDART 공시 조회 시작 (code={code}, corp_code={corp_code})")
+
+    try:
+        resp = requests.get(
+            DART_LIST_URL,
+            params={
+                "crtfc_key": dart_key,
+                "corp_code": corp_code,
+                "bgn_de": bgn_de,
+                "page_count": 8,
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            logger.warning(f"[DART] 공시 목록 API 비정상 응답 ({resp.status_code})")
+            return []
+
+        data = resp.json()
+        if data.get("status") != "000":
+            logger.info(f"[DART] 조회 결과: {data.get('message')} (status={data.get('status')})")
+            return []
+
+        results = []
+        for item in (data.get("list") or [])[:8]:
+            raw_dt = item.get("rcept_dt", "")
+            fmt_dt = f"{raw_dt[:4]}-{raw_dt[4:6]}-{raw_dt[6:]}" if len(raw_dt) == 8 else raw_dt
+            rcp_no = item.get("rcept_no", "")
+            results.append({
+                "date": fmt_dt,
+                "title": (item.get("report_nm") or "").strip(),
+                "submitter": (item.get("flr_nm") or "").strip(),
+                "url": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcp_no}" if rcp_no else "",
+            })
+
+        logger.info(f"[DART] 공식 공시 수집 완료 (code={code}, 건수={len(results)})")
+        return results
+
+    except Exception as e:
+        logger.warning(f"[DART] 공시 조회 중 예외 발생: {e}")
+        return []
+
+
 def collect_stock_data(code_or_name):
     """종목코드 또는 종목명을 검증/변환하고 전체 주식 데이터를 병렬 수집하여 규격 JSON(dict) 반환"""
     errors = []
@@ -526,19 +625,21 @@ def collect_stock_data(code_or_name):
     # 1단계: 기본 시세 + 정식 종목명 확보 (뉴스 검색어 확보를 위해 선행)
     name, snapshot, extra_naver = fetch_basic_quote(clean_code, errors)
 
-    # 2단계: 연간실적, 분기실적, 시장지수, 우쎔AI, Serper뉴스 5개 작업 동시 병렬 수집
+    # 2단계: 연간실적, 분기실적, 시장지수, 우쎔AI, OpenDART공시, Serper뉴스 6개 작업 동시 병렬 수집
     annual_errors, quarter_errors, news_errors = [], [], []
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         fut_annual = executor.submit(fetch_financials, clean_code, annual_errors, "annual")
         fut_quarter = executor.submit(fetch_financials, clean_code, quarter_errors, "quarter")
         fut_market = executor.submit(fetch_market_indices)
         fut_ezinit = executor.submit(fetch_ezinit_analysis, clean_code)
+        fut_dart = executor.submit(fetch_dart_disclosures, clean_code)
         fut_news = executor.submit(fetch_news, name, news_errors)
 
         financials = fut_annual.result()
         quarter_financials = fut_quarter.result()
         market_indices = fut_market.result()
         ezinit_analysis = fut_ezinit.result()
+        dart_disclosures = fut_dart.result()
         news = fut_news.result()
 
     errors.extend(annual_errors)
@@ -557,6 +658,7 @@ def collect_stock_data(code_or_name):
         "financials": financials,
         "quarter_financials": quarter_financials,
         "ezinit_analysis": ezinit_analysis,
+        "dart_disclosures": dart_disclosures,
         "news": news,
         "errors": errors,
     }

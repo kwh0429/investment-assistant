@@ -483,31 +483,42 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
         });
     }
 
-    // 5구역: 우쎔AI 리포트 & DART 공시 (ezinit)
+    // 5구역: 시장 상대강도 요약 & OpenDART 공식 공시
     evEzinitBox.innerHTML = "";
     const ez = evidence.ezinit_analysis;
-    if (!ez) {
-        evEzinitBox.innerHTML = '<p class="muted-text">이 종목에 대한 최근 수급/공시 요약 리포트가 없습니다.</p>';
-    } else {
-        const titleEl = document.createElement("p");
-        titleEl.innerHTML = `<strong>📌 ${escapeHtml(ez.title)}</strong> (<a href="${escapeHtml(ez.url)}" target="_blank" rel="noopener noreferrer">원문 보기 ↗</a>)`;
-        evEzinitBox.appendChild(titleEl);
+    const dartList = evidence.dart_disclosures || [];
 
-        if (ez.summary) {
+    if (!ez && dartList.length === 0) {
+        evEzinitBox.innerHTML = '<p class="muted-text">이 종목에 대한 최근 수급/공시 요약 데이터가 없습니다.</p>';
+    } else {
+        if (ez && ez.summary) {
+            const sumTitle = document.createElement("h4");
+            sumTitle.textContent = "📊 시장 대비 상대강도 & 수급 요약";
+            evEzinitBox.appendChild(sumTitle);
+
             const sumEl = document.createElement("p");
-            sumEl.style.marginTop = "8px";
+            sumEl.style.marginTop = "6px";
             sumEl.textContent = ez.summary;
             evEzinitBox.appendChild(sumEl);
         }
 
-        if (ez.disclosures && ez.disclosures.length > 0) {
+        const disclosuresToShow = dartList.length > 0 ? dartList : (ez?.disclosures || []);
+        if (disclosuresToShow.length > 0) {
             const discTitle = document.createElement("h4");
-            discTitle.style.marginTop = "12px";
-            discTitle.textContent = "📑 최근 DART 주요 공시";
+            discTitle.style.marginTop = "14px";
+            discTitle.textContent = dartList.length > 0
+                ? "📑 금융감독원 OpenDART 공식 공시 (최근 90일)"
+                : "📑 최근 DART 주요 공시";
             evEzinitBox.appendChild(discTitle);
-            ez.disclosures.forEach((d) => {
+
+            disclosuresToShow.forEach((d) => {
                 const p = document.createElement("p");
-                p.textContent = `• [${d.date}] (${d.category}) ${d.title}`;
+                p.style.marginTop = "4px";
+                if (d.url) {
+                    p.innerHTML = `• [${escapeHtml(d.date)}] <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(d.title)} ↗</a> (${escapeHtml(d.submitter || "")})`;
+                } else {
+                    p.textContent = `• [${d.date}] (${d.category || ""}) ${d.title}`;
+                }
                 evEzinitBox.appendChild(p);
             });
         }
