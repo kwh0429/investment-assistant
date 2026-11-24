@@ -7,6 +7,7 @@ let currentTechCode = "";
 let currentTechSummary = null;
 let lastRebalanceData = null;
 let isBeginnerMode = localStorage.getItem("beginnerMode") === "true";
+let isProMode = localStorage.getItem("proMode") === "true";
 
 // Chart.js 다크 테마 전역 스타일 적용
 if (typeof Chart !== "undefined") {
@@ -26,6 +27,7 @@ let macdChartInstance = null;
 // =========================================================
 const healthBadge = document.getElementById("healthBadge");
 const beginnerModeBtn = document.getElementById("beginnerModeBtn");
+const proModeBtn = document.getElementById("proModeBtn");
 const globalErrorBox = document.getElementById("globalErrorBox");
 const globalErrorList = document.getElementById("globalErrorList");
 
@@ -300,7 +302,9 @@ const evChangeRate = document.getElementById("evChangeRate");
 const evMarketConsensusGrid = document.getElementById("evMarketConsensusGrid");
 const evQuoteGrid = document.getElementById("evQuoteGrid");
 const evInvestGrid = document.getElementById("evInvestGrid");
+const evProValuationGrid = document.getElementById("evProValuationGrid");
 const evFinancialsTable = document.getElementById("evFinancialsTable");
+const evQuarterTable = document.getElementById("evQuarterTable");
 const evTrendsTable = document.getElementById("evTrendsTable");
 const evEzinitBox = document.getElementById("evEzinitBox");
 const evExtraBox = document.getElementById("evExtraBox");
@@ -411,22 +415,41 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
         { label: "주당배당금", value: formatNumber(snap.dividend, "원") },
     ]);
 
-    // 3구역: 기업실적분석 테이블
-    const thead = evFinancialsTable.querySelector("thead");
-    const tbody = evFinancialsTable.querySelector("tbody");
-    thead.innerHTML = "";
-    tbody.innerHTML = "";
+    // 전문가 모드 전용: 파생 밸류에이션 & 괴리율 계산
+    const currP = snap.current_price;
+    const targetP = cns.target_price;
+    const upsidePct = (currP && targetP) ? (((targetP - currP) / currP) * 100).toFixed(2) : null;
+    const deratingPct = (snap.per && snap.cns_per) ? (((snap.per - snap.cns_per) / snap.per) * 100).toFixed(2) : null;
+    const dd52Pct = (currP && snap.week52_high) ? (((currP - snap.week52_high) / snap.week52_high) * 100).toFixed(2) : null;
+    const pos52Pct = (currP && snap.week52_high && snap.week52_low && snap.week52_high !== snap.week52_low)
+        ? (((currP - snap.week52_low) / (snap.week52_high - snap.week52_low)) * 100).toFixed(1)
+        : null;
 
-    const financials = evidence.financials || [];
-    if (financials.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">수집된 실적 데이터가 없습니다.</td></tr>';
-    } else {
+    renderMetricGrid(evProValuationGrid, [
+        { label: "목표주가 괴리율 (Upside)", value: upsidePct !== null ? `${upsidePct > 0 ? "+" : ""}${upsidePct}%` : "-" },
+        { label: "Fwd PER 할인율 (디레이팅)", value: deratingPct !== null ? `${deratingPct}%` : "-" },
+        { label: "52주 고점 대비 낙폭", value: dd52Pct !== null ? `${dd52Pct}%` : "-" },
+        { label: "52주 밴드 내 위치", value: pos52Pct !== null ? `${pos52Pct}%` : "-" },
+    ]);
+
+    // 3구역: 연간 & 분기 기업실적분석 테이블 (공용 렌더러)
+    function renderFinanceTableElement(tableEl, finList) {
+        const thead = tableEl.querySelector("thead");
+        const tbody = tableEl.querySelector("tbody");
+        thead.innerHTML = "";
+        tbody.innerHTML = "";
+
+        if (!finList || finList.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5">수집된 실적 데이터가 없습니다.</td></tr>';
+            return;
+        }
+
         const headerRow = document.createElement("tr");
         const mTh = document.createElement("th");
         mTh.textContent = "주요 재무지표";
         headerRow.appendChild(mTh);
 
-        financials.forEach((f) => {
+        finList.forEach((f) => {
             const th = document.createElement("th");
             if (f.is_consensus) {
                 th.className = "consensus-col";
@@ -455,7 +478,7 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
             lTd.textContent = label;
             tr.appendChild(lTd);
 
-            financials.forEach((f) => {
+            finList.forEach((f) => {
                 const td = document.createElement("td");
                 const val = f[key];
                 if (f.is_consensus) td.classList.add("consensus-col");
@@ -466,6 +489,9 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
             tbody.appendChild(tr);
         });
     }
+
+    renderFinanceTableElement(evFinancialsTable, evidence.financials || []);
+    renderFinanceTableElement(evQuarterTable, evidence.quarter_financials || []);
 
     // 4구역: 최근 5거래일 수급 동향
     const trendsBody = evTrendsTable.querySelector("tbody");
@@ -628,6 +654,7 @@ analysisInitForm.addEventListener("submit", async (e) => {
                 quantity,
                 use_tool: useTool,
                 beginner_mode: isBeginnerMode,
+                pro_mode: isProMode,
             }),
         });
         const data = await res.json();
@@ -689,6 +716,7 @@ analysisChatForm.addEventListener("submit", async (e) => {
                 use_tool: useTool,
                 conversation_id: analysisConversationId,
                 beginner_mode: isBeginnerMode,
+                pro_mode: isProMode,
             }),
         });
         const data = await res.json();
@@ -760,6 +788,7 @@ const rebalanceLoading = document.getElementById("rebalanceLoading");
 const rebalanceResult = document.getElementById("rebalanceResult");
 const rebalanceSummaryGrid = document.getElementById("rebalanceSummaryGrid");
 const assetStatsTableBody = document.querySelector("#assetStatsTable tbody");
+const corrMatrixTable = document.getElementById("corrMatrixTable");
 
 function renderRebalanceCharts(data) {
     const optimal = data.optimal_portfolio;
@@ -911,6 +940,29 @@ rebalanceForm.addEventListener("submit", async (e) => {
         lastRebalanceData = data;
         renderAssetStatsTable(data);
 
+        // 전문가 모드: 상관계수 행렬 렌더링
+        const corr = data.correlation_matrix || {};
+        const cHead = corrMatrixTable.querySelector("thead");
+        const cBody = corrMatrixTable.querySelector("tbody");
+        cHead.innerHTML = "";
+        cBody.innerHTML = "";
+        if (data.tickers && Object.keys(corr).length > 0) {
+            const hRow = document.createElement("tr");
+            hRow.innerHTML = "<th>종목</th>" + data.tickers.map((t) => `<th>${escapeHtml(t)}</th>`).join("");
+            cHead.appendChild(hRow);
+
+            data.tickers.forEach((rowT) => {
+                const tr = document.createElement("tr");
+                let cells = `<td>${escapeHtml(rowT)}</td>`;
+                data.tickers.forEach((colT) => {
+                    const val = corr[rowT]?.[colT];
+                    cells += `<td>${val !== undefined ? val.toFixed(2) : "-"}</td>`;
+                });
+                tr.innerHTML = cells;
+                cBody.appendChild(tr);
+            });
+        }
+
         renderRebalanceCharts(data);
         rebalanceResult.classList.remove("hidden");
         console.log(`[REBALANCE] 탭2 리밸런싱 계산 완료 (최적 샤프지수=${opt.sharpe_ratio})`);
@@ -938,6 +990,7 @@ const techSearchBtn = document.getElementById("techSearchBtn");
 const techLoading = document.getElementById("techLoading");
 const techResult = document.getElementById("techResult");
 const techSummaryGrid = document.getElementById("techSummaryGrid");
+const techProGrid = document.getElementById("techProGrid");
 
 const techChatBox = document.getElementById("techChatBox");
 const techChatForm = document.getElementById("techChatForm");
@@ -1058,6 +1111,14 @@ techSearchForm.addEventListener("submit", async (e) => {
             techSummaryGrid.appendChild(div);
         });
 
+        // 전문가 모드: 정량 모멘텀 & 변동성 수축 지표
+        renderMetricGrid(techProGrid, [
+            { label: "20일선 이격도", value: s.disparity_20 != null ? `${s.disparity_20}%` : "-" },
+            { label: "볼린저 %B (밴드 위치)", value: s.bb_pct_b != null ? `${s.bb_pct_b}%` : "-" },
+            { label: "볼린저 밴드 폭 (스퀴즈)", value: s.bb_width != null ? `${s.bb_width}%` : "-" },
+            { label: "MACD 히스토그램", value: s.macd_hist != null ? `${s.macd_hist > 0 ? "+" : ""}${formatNumber(s.macd_hist)}` : "-" },
+        ]);
+
         renderTechCharts(data);
         techResult.classList.remove("hidden");
         console.log(`[TECHNICAL] 탭3 기술지표 계산 및 차트 렌더링 완료 (code=${code}, rsi14=${s.rsi14})`);
@@ -1095,6 +1156,7 @@ techChatForm.addEventListener("submit", async (e) => {
                 latest_summary: currentTechSummary,
                 conversation_id: techConversationId,
                 beginner_mode: isBeginnerMode,
+                pro_mode: isProMode,
             }),
         });
         const data = await res.json();
@@ -1147,7 +1209,7 @@ saveTechBtn.addEventListener("click", () => {
 });
 
 // =========================================================
-// 초보자 모드 토글 & 초기화
+// 초보자 / 전문가 모드 토글 & 초기화
 // =========================================================
 function applyBeginnerMode(enabled) {
     isBeginnerMode = enabled;
@@ -1155,6 +1217,20 @@ function applyBeginnerMode(enabled) {
     document.body.classList.toggle("beginner-mode", enabled);
     beginnerModeBtn.classList.toggle("active", enabled);
     beginnerModeBtn.textContent = enabled ? "🐥 초보자 모드: ON" : "🐥 초보자 모드: OFF";
+    if (enabled && isProMode) {
+        applyProMode(false);
+    }
+}
+
+function applyProMode(enabled) {
+    isProMode = enabled;
+    localStorage.setItem("proMode", enabled ? "true" : "false");
+    document.body.classList.toggle("pro-mode", enabled);
+    proModeBtn.classList.toggle("active", enabled);
+    proModeBtn.textContent = enabled ? "🎓 전문가 모드: ON" : "🎓 전문가 모드: OFF";
+    if (enabled && isBeginnerMode) {
+        applyBeginnerMode(false);
+    }
 }
 
 beginnerModeBtn.addEventListener("click", () => {
@@ -1162,8 +1238,14 @@ beginnerModeBtn.addEventListener("click", () => {
     console.log(`[PAGE] 초보자 모드 ${isBeginnerMode ? "켜짐" : "꺼짐"}`);
 });
 
+proModeBtn.addEventListener("click", () => {
+    applyProMode(!isProMode);
+    console.log(`[PAGE] 전문가 모드 ${isProMode ? "켜짐" : "꺼짐"}`);
+});
+
 document.addEventListener("DOMContentLoaded", () => {
     applyBeginnerMode(isBeginnerMode);
+    applyProMode(isProMode);
     initTabs();
     checkServerHealth();
     console.log("[PAGE] 페이지 로드 및 탭 초기화 완료");

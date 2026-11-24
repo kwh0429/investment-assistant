@@ -203,6 +203,13 @@ def calculate_rebalancing(tickers, num_simulations=3000):
         for i in range(0, num_simulations, sample_step)
     ]
 
+    # 종목 간 수익률 상관계수 행렬 (전문가 모드용)
+    corr_df = returns_df.corr().round(2)
+    correlation_matrix = {
+        row_t: {col_t: float(corr_df.loc[row_t, col_t]) for col_t in valid_tickers}
+        for row_t in valid_tickers
+    }
+
     logger.info(
         f"[QUANT] 몬테카를로 리밸런싱 완료 (tickers={valid_tickers}, "
         f"simulations={num_simulations}, best_sharpe={optimal_portfolio['sharpe_ratio']})"
@@ -213,6 +220,7 @@ def calculate_rebalancing(tickers, num_simulations=3000):
         "period_days": len(prices_df),
         "optimal_portfolio": optimal_portfolio,
         "asset_stats": asset_stats,
+        "correlation_matrix": correlation_matrix,
         "frontier_points": frontier_points,
         "errors": errors,
     }
@@ -297,17 +305,33 @@ def calculate_technical_indicators(code, days=365, chart_days=120):
     bb_up_list = _series_to_clean_list(bb_upper.iloc[slice_start:], decimals=0)
     bb_low_list = _series_to_clean_list(bb_lower.iloc[slice_start:], decimals=0)
 
+    last_close = close_list[-1] if close_list else None
+    last_ma20 = ma20_list[-1] if ma20_list else None
+    last_bb_up = bb_up_list[-1] if bb_up_list else None
+    last_bb_low = bb_low_list[-1] if bb_low_list else None
+    last_macd = macd_list[-1] if macd_list else None
+    last_sig = macd_sig_list[-1] if macd_sig_list else None
+
+    bb_width = round((last_bb_up - last_bb_low) / last_ma20 * 100, 2) if (last_bb_up and last_bb_low and last_ma20) else None
+    bb_pct_b = round((last_close - last_bb_low) / (last_bb_up - last_bb_low) * 100, 2) if (last_close and last_bb_up and last_bb_low and last_bb_up != last_bb_low) else None
+    disparity_20 = round((last_close / last_ma20) * 100, 2) if (last_close and last_ma20) else None
+    macd_hist = round(last_macd - last_sig, 2) if (last_macd is not None and last_sig is not None) else None
+
     latest_summary = {
         "date": dates[-1] if dates else None,
-        "close": close_list[-1] if close_list else None,
+        "close": last_close,
         "ma5": ma5_list[-1] if ma5_list else None,
-        "ma20": ma20_list[-1] if ma20_list else None,
+        "ma20": last_ma20,
         "ma60": ma60_list[-1] if ma60_list else None,
         "rsi14": rsi14_list[-1] if rsi14_list else None,
-        "macd": macd_list[-1] if macd_list else None,
-        "macd_signal": macd_sig_list[-1] if macd_sig_list else None,
-        "bb_upper": bb_up_list[-1] if bb_up_list else None,
-        "bb_lower": bb_low_list[-1] if bb_low_list else None,
+        "macd": last_macd,
+        "macd_signal": last_sig,
+        "macd_hist": macd_hist,
+        "bb_upper": last_bb_up,
+        "bb_lower": last_bb_low,
+        "bb_width": bb_width,
+        "bb_pct_b": bb_pct_b,
+        "disparity_20": disparity_20,
     }
 
     logger.info(

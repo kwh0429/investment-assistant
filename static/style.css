@@ -1010,3 +1010,39 @@ body.beginner-mode .beginner-only {
         text-align: left;
     }
 }
+
+
+/* =========================================================
+   전문가 모드 (인디고/시안 퀀트 리서치 스타일)
+   ========================================================= */
+.btn-pro {
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 6px 13px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text-sub);
+    cursor: pointer;
+    transition: all 0.18s;
+}
+
+.btn-pro:hover {
+    border-color: var(--primary);
+    color: var(--accent-soft);
+}
+
+.btn-pro.active {
+    background: rgba(99, 102, 241, 0.24);
+    border-color: var(--primary);
+    color: #e0e7ff;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.28);
+}
+
+.pro-only {
+    display: none;
+}
+
+body.pro-mode .pro-only {
+    display: block;
+}

@@ -30,7 +30,7 @@
 
             <div class="header-actions">
                 <button type="button" id="beginnerModeBtn" class="btn-beginner">🐥 초보자 모드: OFF</button>
-                <a href="/test" class="btn-link">🧪 1차(/test)</a>
+                <button type="button" id="proModeBtn" class="btn-pro">🎓 전문가 모드: OFF</button>
                 <div id="healthBadge" class="health-badge">확인 중...</div>
             </div>
         </div>
@@ -183,6 +183,12 @@
                     <div class="grid-divider">2구역 · 핵심 투자정보 (밸류에이션 &amp; 수급)</div>
                     <div id="evInvestGrid" class="metrics-grid"></div>
 
+                    <!-- 전문가 모드 전용: 파생 밸류에이션 지표 -->
+                    <div class="pro-only">
+                        <div class="grid-divider">🎓 전문가 분석 · 파생 밸류에이션 &amp; 괴리율</div>
+                        <div id="evProValuationGrid" class="metrics-grid"></div>
+                    </div>
+
                     <div class="grid-divider" style="margin-top: 22px;">
                         3구역 · 기업실적분석 (연간 재무제표 · <span class="consensus-badge">예상(E)</span> 추정치 구분)
                     </div>
@@ -191,6 +197,19 @@
                             <thead></thead>
                             <tbody></tbody>
                         </table>
+                    </div>
+
+                    <!-- 전문가 모드 전용: 최근 6개 분기 실적 추이 -->
+                    <div class="pro-only">
+                        <div class="grid-divider" style="margin-top: 22px;">
+                            🎓 전문가 분석 · 분기별 실적 추이 (QoQ 모멘텀)
+                        </div>
+                        <div class="table-wrapper">
+                            <table id="evQuarterTable" class="financials-table">
+                                <thead></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <div class="grid-divider" style="margin-top: 22px;">
@@ -392,6 +411,18 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- 전문가 모드 전용: 상관계수 행렬 -->
+                <div class="card pro-only">
+                    <h3>🎓 전문가 분석 · 자산 간 수익률 상관계수 행렬 (Correlation Matrix)</h3>
+                    <p class="section-desc" style="margin-bottom: 12px;">1.0에 가까울수록 두 자산이 같은 방향으로 움직이며, 0에 가깝거나 음수(-)일수록 포트폴리오 분산(위험 상쇄) 효과가 큽니다.</p>
+                    <div class="table-wrapper">
+                        <table id="corrMatrixTable" class="financials-table">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -468,6 +499,12 @@
                 <div class="card">
                     <h3>📌 최신 기술지표 계산 결과 (Dify 챗봇③ 주입 데이터)</h3>
                     <div id="techSummaryGrid" class="metrics-grid"></div>
+
+                    <!-- 전문가 모드 전용: 정량 모멘텀 & 변동성 지표 -->
+                    <div class="pro-only" style="margin-top: 16px;">
+                        <div class="grid-divider">🎓 전문가 분석 · 정량 모멘텀 &amp; 변동성 수축 지표</div>
+                        <div id="techProGrid" class="metrics-grid"></div>
+                    </div>
                 </div>
 
                 <!-- 차트 영역 -->
