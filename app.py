@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from google import genai
 from collector import collect_stock_data
 from quant import calculate_rebalancing, calculate_technical_indicators
-from dify_client import call_dify_chatbot
+from dify_client import call_dify_chatbot, call_gemini_with_fallback
 
 # 환경변수(.env) 로드
 load_dotenv()
@@ -158,24 +158,15 @@ def brief():
 {json.dumps(stock_data, ensure_ascii=False, indent=2)}
 """
 
-    try:
-        client = genai.Client(api_key=gemini_key)
-        response = client.models.generate_content(
-            model=gemini_model,
-            contents=prompt,
-        )
-        brief_text = response.text or ""
-        logger.info(f"[RESPONSE] AI 브리핑 생성 완료 (target={stock_name}, length={len(brief_text)})")
-        return jsonify({
-            "model": gemini_model,
-            "briefing": brief_text,
-        }), 200
+    fb = call_gemini_with_fallback(prompt)
+    if fb.get("error"):
+        return jsonify({"error": fb["error"]}), 500
 
-    except Exception as e:
-        logger.error("[ERROR] Gemini 브리핑 생성 실패", exc_info=True)
-        return jsonify({
-            "error": f"AI 브리핑 생성 중 오류가 발생했습니다: {str(e)}"
-        }), 500
+    logger.info(f"[RESPONSE] AI 브리핑 생성 완료 (target={stock_name}, model={fb['model']}, length={len(fb['answer'])})")
+    return jsonify({
+        "model": fb["model"],
+        "briefing": fb["answer"],
+    }), 200
 
 
 @app.route('/api/rebalance', methods=['POST'])
