@@ -8,32 +8,40 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <div class="container">
-        <!-- 상단 헤더 -->
-        <header class="header">
-            <div class="header-title">
-                <h1>📈 나의 투자도우미 (My Investment Assistant)</h1>
-                <p class="subtitle">근거 기반 Dify 심층분석 · 파이썬 몬테카를로 리밸런싱 · FDR 기술지표 AI 설명</p>
+    <!-- 고정 상단 네비게이션 바 (3SEC 스타일 다크 핀테크) -->
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="brand">
+                <span class="brand-mark">M</span>
+                <span class="brand-name">MY INVEST<span class="brand-dot">.</span></span>
             </div>
+
+            <nav class="tabs-nav">
+                <button type="button" class="tab-btn active" data-tab="analysis">
+                    💬 종목 심층분석
+                </button>
+                <button type="button" class="tab-btn" data-tab="rebalance">
+                    ⚖️ 리밸런싱 도우미
+                </button>
+                <button type="button" class="tab-btn" data-tab="technical">
+                    📊 기술지표 차트
+                </button>
+            </nav>
+
             <div class="header-actions">
                 <button type="button" id="beginnerModeBtn" class="btn-beginner">🐥 초보자 모드: OFF</button>
-                <a href="/test" class="btn-link">🧪 1차 수집기(/test)</a>
-                <div id="healthBadge" class="health-badge">서버 상태 확인 중...</div>
+                <a href="/test" class="btn-link">🧪 1차(/test)</a>
+                <div id="healthBadge" class="health-badge">확인 중...</div>
             </div>
-        </header>
+        </div>
+    </header>
 
-        <!-- 3탭 내비게이션 -->
-        <nav class="tabs-nav">
-            <button type="button" class="tab-btn active" data-tab="analysis">
-                💬 탭 1. 종목 심층분석 채팅
-            </button>
-            <button type="button" class="tab-btn" data-tab="rebalance">
-                ⚖️ 탭 2. 리밸런싱 도우미
-            </button>
-            <button type="button" class="tab-btn" data-tab="technical">
-                📊 탭 3. 기술지표 차트 + 채팅
-            </button>
-        </nav>
+    <div class="container">
+        <!-- 서브 히어로 바 -->
+        <div class="sub-hero">
+            <span class="eyebrow">MY INVESTMENT RESEARCH</span>
+            <span class="sub-hero-right">근거 기반 Dify PB · 몬테카를로 리밸런싱 · FDR 기술지표</span>
+        </div>
 
         <!-- 공용 오류 배너 -->
         <div id="globalErrorBox" class="error-box hidden">

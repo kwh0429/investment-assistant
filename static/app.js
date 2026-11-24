@@ -8,6 +8,12 @@ let currentTechSummary = null;
 let lastRebalanceData = null;
 let isBeginnerMode = localStorage.getItem("beginnerMode") === "true";
 
+// Chart.js 다크 테마 전역 스타일 적용
+if (typeof Chart !== "undefined") {
+    Chart.defaults.color = "#94a3b8";
+    Chart.defaults.borderColor = "rgba(148, 163, 184, 0.14)";
+}
+
 // Chart.js 인스턴스 (재조회 시 destroy 필수)
 let weightChartInstance = null;
 let frontierChartInstance = null;
@@ -951,12 +957,12 @@ function renderTechCharts(data) {
         data: {
             labels: data.dates,
             datasets: [
-                { label: "종가", data: data.close, borderColor: "#1e293b", borderWidth: 2, pointRadius: 0 },
-                { label: "MA5", data: ind.ma5, borderColor: "#ef4444", borderWidth: 1.5, pointRadius: 0 },
-                { label: "MA20", data: ind.ma20, borderColor: "#f59e0b", borderWidth: 1.5, pointRadius: 0 },
-                { label: "MA60", data: ind.ma60, borderColor: "#10b981", borderWidth: 1.5, pointRadius: 0 },
-                { label: "볼린저 상단", data: ind.bb_upper, borderColor: "#94a3b8", borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
-                { label: "볼린저 하단", data: ind.bb_lower, borderColor: "#94a3b8", borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+                { label: "종가", data: data.close, borderColor: "#f8fafc", borderWidth: 2.2, pointRadius: 0 },
+                { label: "MA5", data: ind.ma5, borderColor: "#f87171", borderWidth: 1.5, pointRadius: 0 },
+                { label: "MA20", data: ind.ma20, borderColor: "#fbbf24", borderWidth: 1.5, pointRadius: 0 },
+                { label: "MA60", data: ind.ma60, borderColor: "#34d399", borderWidth: 1.5, pointRadius: 0 },
+                { label: "볼린저 상단", data: ind.bb_upper, borderColor: "#64748b", borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+                { label: "볼린저 하단", data: ind.bb_lower, borderColor: "#64748b", borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
             ],
         },
         options: {
