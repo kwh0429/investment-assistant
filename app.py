@@ -496,12 +496,84 @@ def api_chat_technical():
         return jsonify({"error": "기술지표 채팅 처리 중 서버 내부 오류가 발생했습니다."}), 500
 
 
+def _gather_daily_candidates(limit=3):
+    """당일 시가총액 상위 후보 종목들의 시세·재무·수급·기술지표·뉴스·공시를 병렬 수집"""
+    candidate_codes = fetch_daily_candidates(limit=limit)
+
+    def _gather_one(code):
+        ev = collect_stock_data(code)
+        tech = calculate_technical_indicators(code)
+        snap = ev.get("snapshot") or {}
+        cns = ev.get("consensus") or {}
+        ts = tech.get("latest_summary") or {}
+        return {
+            "code": ev.get("code") or code,
+            "name": ev.get("name") or code,
+            "current_price": snap.get("current_price"),
+            "change_rate": snap.get("change_rate"),
+            "market_cap": snap.get("market_cap"),
+            "per": snap.get("per"),
+            "cns_per": snap.get("cns_per"),
+            "pbr": snap.get("pbr"),
+            "week52_high": snap.get("week52_high"),
+            "week52_low": snap.get("week52_low"),
+            "target_price_consensus": cns.get("target_price"),
+            "investor_trends": (ev.get("investor_trends") or [])[:3],
+            "annual_financials": (ev.get("financials") or [])[-2:],
+            "technical": {
+                "ma5": ts.get("ma5"),
+                "ma20": ts.get("ma20"),
+                "ma60": ts.get("ma60"),
+                "rsi14": ts.get("rsi14"),
+                "macd": ts.get("macd"),
+                "macd_signal": ts.get("macd_signal"),
+                "bb_upper": ts.get("bb_upper"),
+                "bb_lower": ts.get("bb_lower"),
+            },
+            "news_titles": [n.get("title") for n in (ev.get("news") or [])[:4]],
+            "dart_titles": [d.get("title") for d in (ev.get("dart_disclosures") or [])[:3]],
+        }
+
+    candidates_data = []
+    with ThreadPoolExecutor(max_workers=limit) as executor:
+        futures = [executor.submit(_gather_one, c) for c in candidate_codes]
+        for fut in futures:
+            try:
+                item = fut.result()
+                if item.get("current_price"):
+                    candidates_data.append(item)
+            except Exception as e:
+                logger.warning(f"[DAILY_PICK] 후보 수집 중 일부 스킵: {e}")
+    return candidates_data
+
+
+@app.route('/api/daily-candidates', methods=['POST'])
+def api_daily_candidates():
+    """[탭 4 - 1단계] 당일 후보 종목 데이터만 빠르게 병렬 수집하여 반환"""
+    try:
+        payload = request.get_json(silent=True) or {}
+        force_refresh = bool(payload.get("force_refresh", False))
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        if not force_refresh and _DAILY_PICK_CACHE["date"] == today_str and _DAILY_PICK_CACHE["data"]:
+            logger.info(f"[DAILY_PICK] 당일 캐시 히트 ({today_str})")
+            return jsonify({"cached": True, "result": _DAILY_PICK_CACHE["data"]}), 200
+
+        candidates_data = _gather_daily_candidates(limit=3)
+        if not candidates_data:
+            return jsonify({"error": "당일 후보 종목 데이터를 수집하지 못했습니다."}), 500
+
+        return jsonify({"cached": False, "candidates": candidates_data}), 200
+    except Exception:
+        logger.error("[ERROR] POST /api/daily-candidates 오류", exc_info=True)
+        return jsonify({"error": "후보 종목 수집 중 오류가 발생했습니다."}), 500
+
+
 @app.route('/api/daily-pick', methods=['POST'])
 def api_daily_pick():
     """
-    [탭 4: 하루 1종목 추천]
-    당일 시가총액 상위 후보 종목들의 실시간 시세·재무·수급·기술지표·뉴스·공시를 병렬 수집하고,
-    3단계 폴백 모델(gemini-3.5-flash-lite -> 3.1-flash-lite -> gemma-4-26b-a4b-it)로
+    [탭 4 - 2단계: 하루 1종목 추천]
+    프론트엔드가 전달한 후보 종목 데이터(또는 직접 수집)를 종합해
     가장 유망한 1종목과 진입가·예상판매가·선정이유·기업소개를 도출한다.
     """
     try:
@@ -515,52 +587,11 @@ def api_daily_pick():
             return jsonify(_DAILY_PICK_CACHE["data"]), 200
 
         logger.info(f"[REQUEST] POST /api/daily-pick (date={today_str}, force_refresh={force_refresh})")
-        candidate_codes = fetch_daily_candidates(limit=3)
-
-        def _gather_candidate(code):
-            ev = collect_stock_data(code)
-            tech = calculate_technical_indicators(code)
-            snap = ev.get("snapshot") or {}
-            cns = ev.get("consensus") or {}
-            ts = tech.get("latest_summary") or {}
-            return {
-                "code": ev.get("code") or code,
-                "name": ev.get("name") or code,
-                "current_price": snap.get("current_price"),
-                "change_rate": snap.get("change_rate"),
-                "market_cap": snap.get("market_cap"),
-                "per": snap.get("per"),
-                "cns_per": snap.get("cns_per"),
-                "pbr": snap.get("pbr"),
-                "week52_high": snap.get("week52_high"),
-                "week52_low": snap.get("week52_low"),
-                "target_price_consensus": cns.get("target_price"),
-                "investor_trends": (ev.get("investor_trends") or [])[:3],
-                "annual_financials": (ev.get("financials") or [])[-2:],
-                "technical": {
-                    "ma5": ts.get("ma5"),
-                    "ma20": ts.get("ma20"),
-                    "ma60": ts.get("ma60"),
-                    "rsi14": ts.get("rsi14"),
-                    "macd": ts.get("macd"),
-                    "macd_signal": ts.get("macd_signal"),
-                    "bb_upper": ts.get("bb_upper"),
-                    "bb_lower": ts.get("bb_lower"),
-                },
-                "news_titles": [n.get("title") for n in (ev.get("news") or [])[:4]],
-                "dart_titles": [d.get("title") for d in (ev.get("dart_disclosures") or [])[:3]],
-            }
-
-        candidates_data = []
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(_gather_candidate, c) for c in candidate_codes]
-            for fut in futures:
-                try:
-                    item = fut.result()
-                    if item.get("current_price"):
-                        candidates_data.append(item)
-                except Exception as e:
-                    logger.warning(f"[DAILY_PICK] 후보 수집 중 일부 스킵: {e}")
+        provided_candidates = payload.get("candidates")
+        if isinstance(provided_candidates, list) and len(provided_candidates) > 0:
+            candidates_data = provided_candidates
+        else:
+            candidates_data = _gather_daily_candidates(limit=3)
 
         if not candidates_data:
             return jsonify({"error": "당일 후보 종목 데이터를 수집하지 못했습니다."}), 500

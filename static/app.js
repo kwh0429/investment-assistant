@@ -1267,20 +1267,56 @@ async function loadDailyPick(forceRefresh = false) {
     dailyPickRefreshBtn.disabled = true;
 
     try {
-        const res = await fetch("/api/daily-pick", {
+        const loadingSpan = dailyPickLoading.querySelector("span");
+        if (loadingSpan) {
+            loadingSpan.textContent = "당일 후보 종목 데이터를 수집하고 있습니다...";
+        }
+
+        const candRes = await fetch("/api/daily-candidates", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                force_refresh: forceRefresh,
-                beginner_mode: isBeginnerMode,
-            }),
+            body: JSON.stringify({ force_refresh: forceRefresh }),
         });
-        const data = await res.json();
+        let candData = {};
+        try {
+            candData = await candRes.json();
+        } catch {
+            candData = {};
+        }
 
-        if (!res.ok) {
-            showGlobalErrors([data.error || "오늘의 추천 종목을 불러오지 못했습니다."]);
-            console.error("[ERROR] 탭4 추천 오류", data.error);
+        if (!candRes.ok) {
+            showGlobalErrors([candData.error || "후보 종목 데이터 수집에 실패했습니다. (서버 응답 시간 초과 또는 오류)"]);
+            console.error("[ERROR] 탭4 후보 수집 오류", candRes.status, candData.error);
             return;
+        }
+
+        let data;
+        if (candData.cached && candData.result) {
+            data = candData.result;
+        } else {
+            if (loadingSpan) {
+                loadingSpan.textContent = "수집된 데이터를 바탕으로 오늘의 종목을 선정 중입니다...";
+            }
+            const res = await fetch("/api/daily-pick", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    force_refresh: forceRefresh,
+                    beginner_mode: isBeginnerMode,
+                    candidates: candData.candidates || [],
+                }),
+            });
+            try {
+                data = await res.json();
+            } catch {
+                data = {};
+            }
+
+            if (!res.ok) {
+                showGlobalErrors([data.error || "오늘의 추천 종목을 불러오지 못했습니다. (서버 응답 시간 초과 또는 오류)"]);
+                console.error("[ERROR] 탭4 추천 오류", res.status, data.error);
+                return;
+            }
         }
 
         const p = data.pick || {};
