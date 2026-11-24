@@ -302,25 +302,30 @@
                     </div>
                 </div>
 
-                <form id="rebalanceForm" class="search-form">
-                    <input
-                        type="text"
-                        id="rebalanceTickers"
-                        class="search-input"
-                        placeholder="종목/ETF 이름 또는 코드 2개 이상을 쉼표(,)로 구분해 입력 (예: 삼성전자, SK하이닉스, KODEX 200)"
-                        value="삼성전자, SK하이닉스, KODEX 200"
-                    >
-                    <input
-                        type="number"
-                        id="rebalanceCapital"
-                        class="search-input"
-                        style="max-width: 210px;"
-                        placeholder="총 투자금액(원)"
-                        value="10000000"
-                        min="0"
-                        step="100000"
-                    >
-                    <button type="submit" id="rebalanceBtn" class="btn btn-primary">최적 비중 계산</button>
+                <form id="rebalanceForm" class="search-form" style="align-items: flex-end; flex-wrap: wrap;">
+                    <div class="input-group" style="flex: 1; min-width: 240px;">
+                        <label for="rebalanceTickers" class="field-label">종목 / ETF 목록 (쉼표 구분)</label>
+                        <input
+                            type="text"
+                            id="rebalanceTickers"
+                            class="search-input"
+                            placeholder="종목/ETF 이름 또는 코드 2개 이상 (예: 삼성전자, SK하이닉스, KODEX 200)"
+                            value="삼성전자, SK하이닉스, KODEX 200"
+                        >
+                    </div>
+                    <div class="input-group" style="width: 200px;">
+                        <label for="rebalanceCapital" class="field-label">총 투자금액 (원)</label>
+                        <input
+                            type="number"
+                            id="rebalanceCapital"
+                            class="search-input"
+                            placeholder="예: 10000000"
+                            value="10000000"
+                            min="0"
+                            step="100000"
+                        >
+                    </div>
+                    <button type="submit" id="rebalanceBtn" class="btn btn-primary" style="height: 46px;">최적 비중 계산</button>
                 </form>
                 <div class="quick-picks">
                     <span class="quick-label">포트폴리오 예시:</span>

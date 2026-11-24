@@ -919,3 +919,18 @@ body.beginner-mode .beginner-only {
         grid-template-columns: 1fr;
     }
 }
+
+
+/* 입력 필드 상단 라벨 */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.field-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    padding-left: 2px;
+}
