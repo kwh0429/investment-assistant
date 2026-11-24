@@ -1046,3 +1046,161 @@ body.beginner-mode .beginner-only {
 body.pro-mode .pro-only {
     display: block;
 }
+
+
+/* =========================================================
+   모바일 & 아이폰(iOS Safari) 최적화
+   ========================================================= */
+@media (max-width: 640px) {
+    body {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .topbar-inner {
+        padding: 10px 14px;
+        gap: 10px;
+    }
+
+    .brand {
+        order: 1;
+    }
+
+    .header-actions {
+        order: 2;
+        gap: 6px;
+    }
+
+    .btn-beginner,
+    .btn-pro {
+        padding: 5px 10px;
+        font-size: 0.75rem;
+    }
+
+    .tabs-nav {
+        order: 3;
+        width: 100%;
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 6px;
+        padding-top: 4px;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .tabs-nav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tab-btn {
+        flex: 0 0 auto;
+        padding: 7px 12px;
+        font-size: 0.84rem;
+        white-space: nowrap;
+    }
+
+    .container {
+        padding: 16px 14px 48px;
+    }
+
+    .sub-hero {
+        margin-bottom: 14px;
+        padding-bottom: 10px;
+    }
+
+    .sub-hero-right {
+        font-size: 0.78rem;
+    }
+
+    .card {
+        padding: 16px 15px;
+        margin-bottom: 14px;
+        border-radius: 12px;
+    }
+
+    /* 아이폰 Safari 입력 시 자동 확대(zoom) 방지: 16px 필수 */
+    .search-input {
+        font-size: 16px;
+        padding: 10px 12px;
+        width: 100%;
+    }
+
+    /* 탭 1 평단가/수량, 탭 2 투자금액 모바일 폭 최적화 */
+    #analysisCode {
+        flex: 1 1 100%;
+    }
+
+    #analysisAvgPrice,
+    #analysisQty {
+        max-width: none !important;
+        flex: 1 1 44%;
+    }
+
+    .input-group {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+
+    .control-row .btn,
+    .search-form .btn {
+        width: 100%;
+        padding: 12px;
+    }
+
+    .toggle-label {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* 지표 카드: 모바일에서 한눈에 보기 좋은 2열 그리드 */
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .metric-item {
+        padding: 10px 11px;
+    }
+
+    .metric-value {
+        font-size: 0.94rem;
+    }
+
+    .stock-name {
+        font-size: 1.38rem;
+    }
+
+    .current-price {
+        font-size: 1.45rem;
+    }
+
+    .chat-box,
+    .chat-box.tall-chat {
+        height: 360px;
+        padding: 12px;
+    }
+
+    .chat-msg,
+    .chat-msg.bot.md-body {
+        max-width: 96%;
+        font-size: 0.9rem;
+        padding: 10px 13px;
+    }
+
+    .chat-form {
+        flex-direction: column;
+    }
+
+    .chat-form .btn {
+        width: 100%;
+    }
+
+    .chart-container {
+        height: 235px;
+    }
+
+    .chart-container.tall {
+        height: 255px;
+    }
+}
