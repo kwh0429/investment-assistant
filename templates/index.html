@@ -58,8 +58,8 @@
                         type="text"
                         id="analysisCode"
                         class="search-input"
-                        placeholder="종목코드 또는 종목명 입력 (예: 000660, SK하이닉스)"
-                        value="000660"
+                        placeholder="종목명 또는 코드 입력 (예: 삼성전자, SK하이닉스)"
+                        value="삼성전자"
                     >
                     <input
                         type="number"
@@ -85,10 +85,10 @@
                 </form>
                 <div class="quick-picks">
                     <span class="quick-label">예시 종목:</span>
-                    <button type="button" class="chip analysis-chip" data-code="000660">SK하이닉스 (000660)</button>
-                    <button type="button" class="chip analysis-chip" data-code="005930">삼성전자 (005930)</button>
-                    <button type="button" class="chip analysis-chip" data-code="005380">현대차 (005380)</button>
-                    <button type="button" class="chip analysis-chip" data-code="035420">NAVER (035420)</button>
+                    <button type="button" class="chip analysis-chip" data-code="삼성전자">삼성전자</button>
+                    <button type="button" class="chip analysis-chip" data-code="SK하이닉스">SK하이닉스</button>
+                    <button type="button" class="chip analysis-chip" data-code="현대차">현대차</button>
+                    <button type="button" class="chip analysis-chip" data-code="NAVER">NAVER</button>
                 </div>
             </div>
 
@@ -228,8 +228,8 @@
                         type="text"
                         id="rebalanceTickers"
                         class="search-input"
-                        placeholder="종목/ETF 코드 또는 이름 2개 이상을 쉼표(,)로 구분해 입력 (예: 삼성전자, SK하이닉스, KODEX 200)"
-                        value="005930, 000660, 069500"
+                        placeholder="종목/ETF 이름 또는 코드 2개 이상을 쉼표(,)로 구분해 입력 (예: 삼성전자, SK하이닉스, KODEX 200)"
+                        value="삼성전자, SK하이닉스, KODEX 200"
                     >
                     <input
                         type="number"
@@ -245,8 +245,8 @@
                 </form>
                 <div class="quick-picks">
                     <span class="quick-label">포트폴리오 예시:</span>
-                    <button type="button" class="chip rebalance-chip" data-tickers="005930, 000660, 069500">반도체+코스피200</button>
-                    <button type="button" class="chip rebalance-chip" data-tickers="069500, 360750, 148070">코스피+S&amp;P500+국채10년</button>
+                    <button type="button" class="chip rebalance-chip" data-tickers="삼성전자, SK하이닉스, KODEX 200">반도체+코스피200</button>
+                    <button type="button" class="chip rebalance-chip" data-tickers="KODEX 200, TIGER 미국S&amp;P500, KODEX 국채선물10년">코스피+S&amp;P500+국채10년</button>
                 </div>
             </div>
 
@@ -320,16 +320,16 @@
                         type="text"
                         id="techCode"
                         class="search-input"
-                        placeholder="종목코드 또는 종목명 입력 (예: 000660, SK하이닉스)"
-                        value="000660"
+                        placeholder="종목명 또는 코드 입력 (예: 삼성전자, SK하이닉스)"
+                        value="삼성전자"
                     >
                     <button type="submit" id="techSearchBtn" class="btn btn-primary">차트 &amp; 지표 계산</button>
                 </form>
                 <div class="quick-picks">
                     <span class="quick-label">예시 종목:</span>
-                    <button type="button" class="chip tech-chip" data-code="000660">SK하이닉스 (000660)</button>
-                    <button type="button" class="chip tech-chip" data-code="005930">삼성전자 (005930)</button>
-                    <button type="button" class="chip tech-chip" data-code="035420">NAVER (035420)</button>
+                    <button type="button" class="chip tech-chip" data-code="삼성전자">삼성전자</button>
+                    <button type="button" class="chip tech-chip" data-code="SK하이닉스">SK하이닉스</button>
+                    <button type="button" class="chip tech-chip" data-code="NAVER">NAVER</button>
                 </div>
             </div>
 
