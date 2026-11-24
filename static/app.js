@@ -1196,6 +1196,122 @@ saveTechBtn.addEventListener("click", () => {
 });
 
 // =========================================================
+// 탭 4: 하루 1종목 추천
+// =========================================================
+const dailyPickBtn = document.getElementById("dailyPickBtn");
+const dailyPickRefreshBtn = document.getElementById("dailyPickRefreshBtn");
+const dailyPickLoading = document.getElementById("dailyPickLoading");
+const dailyPickResult = document.getElementById("dailyPickResult");
+
+const dpCodeBadge = document.getElementById("dpCodeBadge");
+const dpDateBadge = document.getElementById("dpDateBadge");
+const dpStockName = document.getElementById("dpStockName");
+const dpCurrentPrice = document.getElementById("dpCurrentPrice");
+const dpExpectedReturn = document.getElementById("dpExpectedReturn");
+const dpPriceGrid = document.getElementById("dpPriceGrid");
+const dpPriceRationale = document.getElementById("dpPriceRationale");
+const dpCompanyIntro = document.getElementById("dpCompanyIntro");
+const dpReasonsList = document.getElementById("dpReasonsList");
+const dpRiskNote = document.getElementById("dpRiskNote");
+const dpCandidatesTableBody = document.querySelector("#dpCandidatesTable tbody");
+
+async function loadDailyPick(forceRefresh = false) {
+    showGlobalErrors([]);
+    dailyPickResult.classList.add("hidden");
+    dailyPickLoading.classList.remove("hidden");
+    dailyPickBtn.disabled = true;
+    dailyPickRefreshBtn.disabled = true;
+
+    try {
+        const res = await fetch("/api/daily-pick", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                force_refresh: forceRefresh,
+                beginner_mode: isBeginnerMode,
+            }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            showGlobalErrors([data.error || "오늘의 추천 종목을 불러오지 못했습니다."]);
+            console.error("[ERROR] 탭4 추천 오류", data.error);
+            return;
+        }
+
+        const p = data.pick || {};
+        dpCodeBadge.textContent = p.selected_code || "-";
+        dpDateBadge.textContent = `${data.date || "-"} 기준`;
+        dpStockName.textContent = p.selected_name || "-";
+        dpCurrentPrice.textContent = formatNumber(p.current_price, "원");
+
+        const expRet = p.expected_return_pct;
+        dpExpectedReturn.textContent = expRet != null ? `목표 기대수익률 ${expRet > 0 ? "+" : ""}${expRet}%` : "-";
+
+        renderMetricGrid(dpPriceGrid, [
+            { label: "현재가", value: formatNumber(p.current_price, "원") },
+            { label: "추천 진입가격", value: formatNumber(p.entry_price, "원") },
+            { label: "예상 판매가 (목표가)", value: formatNumber(p.target_price, "원") },
+            { label: "손절 기준가", value: formatNumber(p.stop_loss_price, "원") },
+        ]);
+
+        dpPriceRationale.textContent = p.price_rationale || "";
+        dpCompanyIntro.textContent = p.company_intro || "";
+
+        dpReasonsList.innerHTML = "";
+        (p.selection_reasons || []).forEach((reason) => {
+            const li = document.createElement("li");
+            li.className = "news-item";
+            li.textContent = reason;
+            dpReasonsList.appendChild(li);
+        });
+
+        dpRiskNote.textContent = p.risk_note || "-";
+
+        dpCandidatesTableBody.innerHTML = "";
+        const summaries = p.candidates_summary || [];
+        if (summaries.length === 0) {
+            (data.candidates_raw || []).forEach((c) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${escapeHtml(c.name)} (${escapeHtml(c.code)})</td>
+                    <td>${formatNumber(c.current_price, "원")}</td>
+                    <td>${formatNumber(c.per, "배")}</td>
+                    <td>${formatNumber(c.rsi14)}</td>
+                    <td>-</td>
+                `;
+                dpCandidatesTableBody.appendChild(tr);
+            });
+        } else {
+            summaries.forEach((c) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td><strong>${escapeHtml(c.name || "-")}</strong> (${escapeHtml(c.code || "-")})</td>
+                    <td>${formatNumber(c.current_price, "원")}</td>
+                    <td>${formatNumber(c.per, "배")}</td>
+                    <td>${formatNumber(c.rsi14)}</td>
+                    <td style="text-align: left; white-space: normal;">${escapeHtml(c.comment || "-")}</td>
+                `;
+                dpCandidatesTableBody.appendChild(tr);
+            });
+        }
+
+        dailyPickResult.classList.remove("hidden");
+        console.log(`[DAILY_PICK] 하루 1종목 추천 완료 (${p.selected_name}, model=${data.model})`);
+    } catch (err) {
+        showGlobalErrors(["추천 종목 요청 중 네트워크 오류가 발생했습니다."]);
+        console.error("[ERROR] 탭4 통신 오류", err);
+    } finally {
+        dailyPickLoading.classList.add("hidden");
+        dailyPickBtn.disabled = false;
+        dailyPickRefreshBtn.disabled = false;
+    }
+}
+
+dailyPickBtn.addEventListener("click", () => loadDailyPick(false));
+dailyPickRefreshBtn.addEventListener("click", () => loadDailyPick(true));
+
+// =========================================================
 // 초보자 / 전문가 모드 토글 & 초기화
 // =========================================================
 function applyBeginnerMode(enabled) {

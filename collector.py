@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 NAVER_API_BASE = "https://m.stock.naver.com/api/stock"
 NAVER_INDEX_BASE = "https://m.stock.naver.com/api/index"
 NAVER_AC_URL = "https://ac.stock.naver.com/ac"
+NAVER_MARKET_VALUE_URL = "https://m.stock.naver.com/api/stocks/marketValue/KOSPI"
 SERPER_NEWS_URL = "https://google.serper.dev/news"
 EZINIT_ANALYSIS_URL = "https://portfolio.ezinit.com/community/stock_analysis"
 DART_CORP_CODE_URL = "https://opendart.fss.or.kr/api/corpCode.xml"
@@ -323,6 +324,47 @@ def fetch_market_indices():
 
     logger.info(f"[NAVER] 시장 지수 수집 완료: {list(indices.keys())}")
     return indices
+
+
+def fetch_daily_candidates(limit=4):
+    """
+    [하루 1종목 추천] 네이버 금융 시가총액 상위 목록에서
+    우선주·스팩 등을 제외한 대표 우량 후보 종목 코드를 반환한다.
+    """
+    logger.info(f"[NAVER] 하루 1종목 추천 후보군 조회 시작 (limit={limit})")
+    try:
+        resp = requests.get(
+            NAVER_MARKET_VALUE_URL,
+            params={"page": 1, "pageSize": 15},
+            headers=HEADERS,
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            logger.warning(f"[NAVER] 시가총액 상위 조회 실패 ({resp.status_code})")
+            return ["005930", "000660", "005380", "035420"][:limit]
+
+        stocks = resp.json().get("stocks", [])
+        candidates = []
+        for s in stocks:
+            code = (s.get("itemCode") or "").strip()
+            name = (s.get("stockName") or "").strip()
+            if not code or not name:
+                continue
+            # 우선주('우'로 끝나거나 코드 끝자리가 5 등) 및 지주사 일부 제외하고 대표 사업주 우선
+            if name.endswith("우") or name.endswith("우B"):
+                continue
+            candidates.append(code)
+            if len(candidates) >= limit:
+                break
+
+        if not candidates:
+            return ["005930", "000660", "005380", "035420"][:limit]
+
+        logger.info(f"[NAVER] 추천 후보군 확보 완료: {candidates}")
+        return candidates
+    except Exception as e:
+        logger.warning(f"[NAVER] 후보군 조회 예외 (기본값 사용): {e}")
+        return ["005930", "000660", "005380", "035420"][:limit]
 
 
 def fetch_ezinit_analysis(code):

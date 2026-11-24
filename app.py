@@ -1,12 +1,18 @@
 import os
+import re
 import json
 import logging
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, jsonify, render_template, request
 from dotenv import load_dotenv
 from google import genai
-from collector import collect_stock_data
+from collector import collect_stock_data, fetch_daily_candidates
 from quant import calculate_rebalancing, calculate_technical_indicators
 from dify_client import call_dify_chatbot, call_gemini_with_fallback
+
+# 당일 하루 1종목 추천 캐시
+_DAILY_PICK_CACHE = {"date": None, "data": None}
 
 # 환경변수(.env) 로드
 load_dotenv()
@@ -482,6 +488,164 @@ def api_chat_technical():
     except Exception:
         logger.error("[ERROR] POST /api/chat/technical 처리 중 오류 발생", exc_info=True)
         return jsonify({"error": "기술지표 채팅 처리 중 서버 내부 오류가 발생했습니다."}), 500
+
+
+@app.route('/api/daily-pick', methods=['POST'])
+def api_daily_pick():
+    """
+    [탭 4: 하루 1종목 추천]
+    당일 시가총액 상위 후보 종목들의 실시간 시세·재무·수급·기술지표·뉴스·공시를 병렬 수집하고,
+    3단계 폴백 모델(gemini-3.5-flash-lite -> 3.1-flash-lite -> gemma-4-26b-a4b-it)로
+    가장 유망한 1종목과 진입가·예상판매가·선정이유·기업소개를 도출한다.
+    """
+    try:
+        payload = request.get_json(silent=True) or {}
+        force_refresh = bool(payload.get("force_refresh", False))
+        beginner_mode = bool(payload.get("beginner_mode", False))
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        if not force_refresh and _DAILY_PICK_CACHE["date"] == today_str and _DAILY_PICK_CACHE["data"]:
+            logger.info(f"[DAILY_PICK] 당일 캐시 반환 ({today_str})")
+            return jsonify(_DAILY_PICK_CACHE["data"]), 200
+
+        logger.info(f"[REQUEST] POST /api/daily-pick (date={today_str}, force_refresh={force_refresh})")
+        candidate_codes = fetch_daily_candidates(limit=4)
+
+        def _gather_candidate(code):
+            ev = collect_stock_data(code)
+            tech = calculate_technical_indicators(code)
+            snap = ev.get("snapshot") or {}
+            cns = ev.get("consensus") or {}
+            ts = tech.get("latest_summary") or {}
+            return {
+                "code": ev.get("code") or code,
+                "name": ev.get("name") or code,
+                "current_price": snap.get("current_price"),
+                "change_rate": snap.get("change_rate"),
+                "market_cap": snap.get("market_cap"),
+                "per": snap.get("per"),
+                "cns_per": snap.get("cns_per"),
+                "pbr": snap.get("pbr"),
+                "week52_high": snap.get("week52_high"),
+                "week52_low": snap.get("week52_low"),
+                "target_price_consensus": cns.get("target_price"),
+                "investor_trends": (ev.get("investor_trends") or [])[:3],
+                "annual_financials": (ev.get("financials") or [])[-2:],
+                "technical": {
+                    "ma5": ts.get("ma5"),
+                    "ma20": ts.get("ma20"),
+                    "ma60": ts.get("ma60"),
+                    "rsi14": ts.get("rsi14"),
+                    "macd": ts.get("macd"),
+                    "macd_signal": ts.get("macd_signal"),
+                    "bb_upper": ts.get("bb_upper"),
+                    "bb_lower": ts.get("bb_lower"),
+                },
+                "news_titles": [n.get("title") for n in (ev.get("news") or [])[:4]],
+                "dart_titles": [d.get("title") for d in (ev.get("dart_disclosures") or [])[:3]],
+            }
+
+        candidates_data = []
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(_gather_candidate, c) for c in candidate_codes]
+            for fut in futures:
+                try:
+                    item = fut.result()
+                    if item.get("current_price"):
+                        candidates_data.append(item)
+                except Exception as e:
+                    logger.warning(f"[DAILY_PICK] 후보 수집 중 일부 스킵: {e}")
+
+        if not candidates_data:
+            return jsonify({"error": "당일 후보 종목 데이터를 수집하지 못했습니다."}), 500
+
+        tone_note = (
+            "초보자도 쉽게 이해할 수 있도록 어려운 용어에는 괄호로 쉬운 비유를 붙여 작성하세요."
+            if beginner_mode
+            else "깔끔하고 논리적인 리서치 리포트 톤으로 작성하세요."
+        )
+
+        prompt = f"""당신은 수석 퀀트·펀더멘털 애널리스트입니다.
+오늘({today_str}) 실제 수집된 아래 {len(candidates_data)}개 후보 종목의 데이터(시세, 밸류에이션, 실적, 수급, 기술적 지표, 최신 뉴스, 공시)를 모두 종합 비교하여, **오늘 가장 투자 매력도가 높은 단 1개의 종목**을 선정하세요.
+
+[선정 및 응답 규칙]
+1. 반드시 제공된 JSON 데이터에 존재하는 후보 종목 중 정확히 1개만 선택하고, 없는 숫자를 지어내지 마세요.
+2. 진입가격(`entry_price`), 예상 판매가/목표가(`target_price`), 손절 기준가(`stop_loss_price`)는 현재가, 이동평균선(MA5/20/60), 볼린저밴드 상/하단, 증권사 컨센서스 목표주가를 근거로 현실적이고 구체적인 원(KRW) 단위 정수로 제시하세요.
+3. {tone_note}
+4. 응답은 마크다운 설명 없이 **반드시 아래 JSON 형식만** 출력하세요:
+
+{{
+  "selected_code": "6자리 종목코드",
+  "selected_name": "정식 종목명",
+  "current_price": 191500,
+  "entry_price": 188000,
+  "target_price": 235000,
+  "stop_loss_price": 176000,
+  "expected_return_pct": 25.0,
+  "company_intro": "기업의 핵심 사업, 시장 지위, 주요 수익원을 3~4문장으로 알기 쉽게 소개",
+  "selection_reasons": [
+    "1. 밸류에이션/실적 근거: 구체적 수치 인용",
+    "2. 수급/시장 흐름 근거: 외인·기관 수급 및 목표주가 인용",
+    "3. 기술적 위치 근거: RSI, 이평선, 볼린저밴드 수치 인용",
+    "4. 뉴스·공시 모멘텀 근거: 최신 이슈 인용"
+  ],
+  "price_rationale": "진입가격과 예상판매가(목표가), 손절가를 해당 가격대로 설정한 기술적·수급적 근거 2~3문장",
+  "risk_note": "투자 시 주의해야 할 핵심 리스크 1~2문장",
+  "candidates_summary": [
+    {{"code": "코드", "name": "종목명", "current_price": 0, "per": 0, "rsi14": 0, "comment": "선정 또는 제외 사유 한 줄 요약"}}
+  ]
+}}
+
+[당일 후보 종목 실제 수집 데이터 JSON]
+{json.dumps(candidates_data, ensure_ascii=False)}
+"""
+
+        fb = call_gemini_with_fallback(prompt)
+        if fb.get("error"):
+            return jsonify({"error": fb["error"]}), 502
+
+        raw_text = fb["answer"].strip()
+        # ```json ... ``` 마크다운 펜스 제거 후 JSON 파싱
+        cleaned_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text, flags=re.IGNORECASE | re.DOTALL).strip()
+        try:
+            pick_result = json.loads(cleaned_json)
+        except ValueError:
+            # 중괄호 블록 추출 재시도
+            m = re.search(r"\{.*\}", cleaned_json, re.DOTALL)
+            if not m:
+                logger.error(f"[ERROR] 하루 1종목 추천 JSON 파싱 실패: {raw_text[:200]}")
+                return jsonify({"error": "추천 결과 형식 변환에 실패했습니다. 다시 시도해 주세요."}), 500
+            pick_result = json.loads(m.group(0))
+
+        final_payload = {
+            "date": today_str,
+            "model": fb["model"],
+            "pick": pick_result,
+            "candidates_raw": [
+                {
+                    "code": c["code"],
+                    "name": c["name"],
+                    "current_price": c["current_price"],
+                    "change_rate": c["change_rate"],
+                    "per": c["per"],
+                    "rsi14": c["technical"].get("rsi14"),
+                }
+                for c in candidates_data
+            ],
+        }
+
+        _DAILY_PICK_CACHE["date"] = today_str
+        _DAILY_PICK_CACHE["data"] = final_payload
+
+        logger.info(
+            f"[RESPONSE] 하루 1종목 추천 완료 (selected={pick_result.get('selected_name')}, "
+            f"model={fb['model']})"
+        )
+        return jsonify(final_payload), 200
+
+    except Exception:
+        logger.error("[ERROR] POST /api/daily-pick 처리 중 오류 발생", exc_info=True)
+        return jsonify({"error": "하루 1종목 추천 생성 중 서버 오류가 발생했습니다."}), 500
 
 
 if __name__ == '__main__':

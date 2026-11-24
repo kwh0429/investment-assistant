@@ -20,6 +20,7 @@
                 <button type="button" class="tab-btn active" data-tab="analysis">종목 분석</button>
                 <button type="button" class="tab-btn" data-tab="rebalance">리밸런싱</button>
                 <button type="button" class="tab-btn" data-tab="technical">기술적 지표</button>
+                <button type="button" class="tab-btn" data-tab="dailypick">하루 1종목 추천</button>
             </nav>
 
             <div class="header-actions">
@@ -537,6 +538,98 @@
                         >
                         <button type="submit" id="techSendBtn" class="btn btn-ai">해설 요청</button>
                     </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- =======================================================
+             탭 4: 하루 1종목 추천
+             ======================================================= -->
+        <section id="tab-dailypick" class="tab-panel">
+            <!-- 초보자 모드 가이드 (탭 4) -->
+            <div class="beginner-only beginner-guide-box">
+                <h3>초보자 가이드 · 하루 1종목 추천</h3>
+                <div class="beginner-qa">
+                    <div class="beginner-qa-item">
+                        <strong>무엇을 하는 화면인가요?</strong>
+                        오늘 시장에서 주목받는 대표 우량주들의 실적, 수급, 차트 위치, 최신 뉴스와 DART 공시를 한꺼번에 비교해 가장 매력적인 단 1개 종목을 선정합니다.
+                    </div>
+                    <div class="beginner-qa-item">
+                        <strong>투자 결정에 어떤 도움이 되나요?</strong>
+                        막연히 "무엇을 살까" 고민할 때, 실제 데이터에 근거한 진입가격(매수 고려가)과 예상 판매가(목표가), 손절 기준선을 한눈에 참고할 수 있습니다.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="panel-header">
+                    <div>
+                        <h2>하루 1종목 추천</h2>
+                        <p class="section-desc">당일 실시간 시세, 재무, 외국인·기관 수급, 기술적 지표, 최신 뉴스와 공시를 종합해 오늘의 추천 종목을 도출합니다.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button type="button" id="dailyPickBtn" class="btn btn-primary">오늘의 종목 추천받기</button>
+                        <button type="button" id="dailyPickRefreshBtn" class="btn btn-secondary">다시 분석</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="dailyPickLoading" class="loading-box hidden">
+                <div class="spinner"></div>
+                <span>당일 시장 후보 종목들의 시세·재무·뉴스·공시를 종합 비교하고 있습니다...</span>
+            </div>
+
+            <div id="dailyPickResult" class="hidden">
+                <!-- 추천 종목 가격 전략 히어로 -->
+                <div class="card">
+                    <div class="stock-header">
+                        <div>
+                            <span id="dpCodeBadge" class="code-badge">-</span>
+                            <span id="dpDateBadge" class="code-badge" style="margin-left: 6px;">-</span>
+                            <h2 id="dpStockName" class="stock-name">-</h2>
+                        </div>
+                        <div class="price-box">
+                            <span id="dpCurrentPrice" class="current-price">-</span>
+                            <span id="dpExpectedReturn" class="change-rate up">-</span>
+                        </div>
+                    </div>
+
+                    <div class="grid-divider">매매 가격 가이드</div>
+                    <div id="dpPriceGrid" class="metrics-grid"></div>
+                    <p id="dpPriceRationale" class="section-desc" style="margin-top: 12px; color: var(--text-sub);"></p>
+                </div>
+
+                <!-- 기업 소개 -->
+                <div class="card">
+                    <h3>기업 소개</h3>
+                    <p id="dpCompanyIntro" style="margin-top: 8px; color: var(--text-sub); line-height: 1.7;"></p>
+                </div>
+
+                <!-- 선정 이유 & 리스크 -->
+                <div class="card">
+                    <h3>선정 이유</h3>
+                    <ul id="dpReasonsList" class="news-list" style="margin-top: 12px;"></ul>
+                    <div class="grid-divider" style="margin-top: 18px;">유의해야 할 리스크</div>
+                    <p id="dpRiskNote" style="color: var(--error-text); font-size: 0.92rem;"></p>
+                </div>
+
+                <!-- 오늘 비교 검토한 후보 종목 -->
+                <div class="card">
+                    <h3>당일 비교 검토 종목</h3>
+                    <div class="table-wrapper" style="margin-top: 10px;">
+                        <table id="dpCandidatesTable" class="financials-table">
+                            <thead>
+                                <tr>
+                                    <th>종목명</th>
+                                    <th>현재가</th>
+                                    <th>PER</th>
+                                    <th>RSI(14)</th>
+                                    <th>평가 요약</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
