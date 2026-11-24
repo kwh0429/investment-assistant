@@ -487,7 +487,7 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
     evEzinitBox.innerHTML = "";
     const ez = evidence.ezinit_analysis;
     if (!ez) {
-        evEzinitBox.innerHTML = '<p class="muted-text">이 종목에 대한 최근 우쎔AI 리포트가 없습니다.</p>';
+        evEzinitBox.innerHTML = '<p class="muted-text">이 종목에 대한 최근 수급/공시 요약 리포트가 없습니다.</p>';
     } else {
         const titleEl = document.createElement("p");
         titleEl.innerHTML = `<strong>📌 ${escapeHtml(ez.title)}</strong> (<a href="${escapeHtml(ez.url)}" target="_blank" rel="noopener noreferrer">원문 보기 ↗</a>)`;
