@@ -5,12 +5,14 @@ let analysisConversationId = "";
 let techConversationId = "";
 let currentTechCode = "";
 let currentTechSummary = null;
+let lastRebalanceData = null;
 
 // Chart.js 인스턴스 (재조회 시 destroy 필수)
 let weightChartInstance = null;
 let frontierChartInstance = null;
 let priceTechChartInstance = null;
 let rsiChartInstance = null;
+let macdChartInstance = null;
 
 // =========================================================
 // 공용 DOM 및 유틸리티
@@ -174,6 +176,7 @@ function renderMarkdownHtml(rawText) {
 
 function appendChatMessage(container, role, text) {
     const div = document.createElement("div");
+    div.dataset.rawText = text;
     if (role === "bot") {
         div.className = "chat-msg bot md-body";
         div.innerHTML = renderMarkdownHtml(text);
@@ -184,6 +187,40 @@ function appendChatMessage(container, role, text) {
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
     return div;
+}
+
+function buildChatMarkdown(container, title) {
+    const msgs = container.querySelectorAll(".chat-msg:not(.loading)");
+    const lines = [`# ${title}`, ""];
+    msgs.forEach((m) => {
+        const isUser = m.classList.contains("user");
+        const raw = m.dataset.rawText || m.textContent.trim();
+        lines.push(isUser ? `### 👤 질문\n${raw}\n` : `### 🤖 AI 답변\n${raw}\n\n---`);
+    });
+    return lines.join("\n");
+}
+
+async function copyChatToClipboard(container, title, btn) {
+    const md = buildChatMarkdown(container, title);
+    try {
+        await navigator.clipboard.writeText(md);
+        const orig = btn.textContent;
+        btn.textContent = "✅ 복사됨!";
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+    } catch (err) {
+        alert("클립보드 복사에 실패했습니다.");
+    }
+}
+
+function downloadChatMarkdown(container, title, filename) {
+    const md = buildChatMarkdown(container, title);
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 // =========================================================
@@ -236,6 +273,8 @@ function initTabs() {
 // =========================================================
 const analysisInitForm = document.getElementById("analysisInitForm");
 const analysisCodeInput = document.getElementById("analysisCode");
+const analysisAvgPriceInput = document.getElementById("analysisAvgPrice");
+const analysisQtyInput = document.getElementById("analysisQty");
 const useToolCheck = document.getElementById("useToolCheck");
 const analysisFetchBtn = document.getElementById("analysisFetchBtn");
 const analysisLoading = document.getElementById("analysisLoading");
@@ -244,13 +283,19 @@ const analysisLoadingText = document.getElementById("analysisLoadingText");
 const analysisEvidenceCard = document.getElementById("analysisEvidenceCard");
 const toggleEvidenceBtn = document.getElementById("toggleEvidenceBtn");
 const evidenceBody = document.getElementById("evidenceBody");
+const evUserPositionBox = document.getElementById("evUserPositionBox");
+const evUserPositionGrid = document.getElementById("evUserPositionGrid");
 const evCodeBadge = document.getElementById("evCodeBadge");
 const evStockName = document.getElementById("evStockName");
 const evCurrentPrice = document.getElementById("evCurrentPrice");
 const evChangeRate = document.getElementById("evChangeRate");
+const evMarketConsensusGrid = document.getElementById("evMarketConsensusGrid");
 const evQuoteGrid = document.getElementById("evQuoteGrid");
 const evInvestGrid = document.getElementById("evInvestGrid");
 const evFinancialsTable = document.getElementById("evFinancialsTable");
+const evTrendsTable = document.getElementById("evTrendsTable");
+const evEzinitBox = document.getElementById("evEzinitBox");
+const evExtraBox = document.getElementById("evExtraBox");
 const evNewsList = document.getElementById("evNewsList");
 
 const analysisChatBox = document.getElementById("analysisChatBox");
@@ -258,6 +303,8 @@ const analysisChatForm = document.getElementById("analysisChatForm");
 const analysisQuestionInput = document.getElementById("analysisQuestion");
 const analysisSendBtn = document.getElementById("analysisSendBtn");
 const resetAnalysisChatBtn = document.getElementById("resetAnalysisChatBtn");
+const copyAnalysisBtn = document.getElementById("copyAnalysisBtn");
+const saveAnalysisBtn = document.getElementById("saveAnalysisBtn");
 
 function renderMetricGrid(container, items) {
     container.innerHTML = "";
@@ -276,11 +323,32 @@ function renderMetricGrid(container, items) {
     });
 }
 
-function renderEvidenceDashboard(evidence, useTool) {
+function renderUserPosition(userPos) {
+    if (!userPos) {
+        evUserPositionBox.classList.add("hidden");
+        return;
+    }
+    const items = [
+        { label: "내 평단가", value: formatNumber(userPos.avg_price, "원") },
+        { label: "현재가", value: formatNumber(userPos.current_price, "원") },
+        { label: "현재 손익률", value: `${userPos.return_pct > 0 ? "+" : ""}${userPos.return_pct}%` },
+    ];
+    if (userPos.quantity) {
+        items.push({ label: "보유 수량", value: formatNumber(userPos.quantity, "주") });
+    }
+    if (userPos.pnl !== null && userPos.pnl !== undefined) {
+        items.push({ label: "평가 손익", value: `${userPos.pnl > 0 ? "+" : ""}${formatNumber(userPos.pnl, "원")}` });
+    }
+    renderMetricGrid(evUserPositionGrid, items);
+    evUserPositionBox.classList.remove("hidden");
+}
+
+function renderEvidenceDashboard(evidence, useTool, userPos = null) {
     if (!useTool || !evidence) {
         analysisEvidenceCard.classList.add("hidden");
         return;
     }
+    renderUserPosition(userPos);
 
     const snap = evidence.snapshot || {};
     evCodeBadge.textContent = evidence.code || "-";
@@ -296,6 +364,18 @@ function renderEvidenceDashboard(evidence, useTool) {
         evChangeRate.textContent = "-";
         evChangeRate.className = "change-rate flat";
     }
+
+    // 0구역: 시장 지수 & 증권사 목표주가
+    const mkt = evidence.market_indices || {};
+    const cns = evidence.consensus || {};
+    const kospi = mkt.KOSPI || {};
+    const kosdaq = mkt.KOSDAQ || {};
+    renderMetricGrid(evMarketConsensusGrid, [
+        { label: "코스피 (KOSPI)", value: kospi.value ? `${formatNumber(kospi.value)} (${kospi.change_rate > 0 ? "+" : ""}${kospi.change_rate}%)` : "-" },
+        { label: "코스닥 (KOSDAQ)", value: kosdaq.value ? `${formatNumber(kosdaq.value)} (${kosdaq.change_rate > 0 ? "+" : ""}${kosdaq.change_rate}%)` : "-" },
+        { label: "증권사 평균 목표주가", value: formatNumber(cns.target_price, "원") },
+        { label: "투자의견 (5점 만점)", value: cns.recomm_score ? `${cns.recomm_score}점` : "-" },
+    ]);
 
     // 1구역: 당일 시세
     renderMetricGrid(evQuoteGrid, [
@@ -379,6 +459,93 @@ function renderEvidenceDashboard(evidence, useTool) {
         });
     }
 
+    // 4구역: 최근 5거래일 수급 동향
+    const trendsBody = evTrendsTable.querySelector("tbody");
+    trendsBody.innerHTML = "";
+    const trends = evidence.investor_trends || [];
+    if (trends.length === 0) {
+        trendsBody.innerHTML = '<tr><td colspan="6">수급 동향 데이터가 없습니다.</td></tr>';
+    } else {
+        trends.forEach((t) => {
+            const tr = document.createElement("tr");
+            const fSign = (t.foreigner_net || 0) > 0 ? "+" : "";
+            const oSign = (t.organ_net || 0) > 0 ? "+" : "";
+            const iSign = (t.individual_net || 0) > 0 ? "+" : "";
+            tr.innerHTML = `
+                <td>${escapeHtml(t.date || "-")}</td>
+                <td>${formatNumber(t.close, "원")}</td>
+                <td class="${(t.foreigner_net || 0) < 0 ? "neg-val" : ""}">${fSign}${formatNumber(t.foreigner_net)}</td>
+                <td class="${(t.organ_net || 0) < 0 ? "neg-val" : ""}">${oSign}${formatNumber(t.organ_net)}</td>
+                <td class="${(t.individual_net || 0) < 0 ? "neg-val" : ""}">${iSign}${formatNumber(t.individual_net)}</td>
+                <td>${t.foreigner_ratio != null ? t.foreigner_ratio + "%" : "-"}</td>
+            `;
+            trendsBody.appendChild(tr);
+        });
+    }
+
+    // 5구역: 우쎔AI 리포트 & DART 공시 (ezinit)
+    evEzinitBox.innerHTML = "";
+    const ez = evidence.ezinit_analysis;
+    if (!ez) {
+        evEzinitBox.innerHTML = '<p class="muted-text">이 종목에 대한 최근 우쎔AI 리포트가 없습니다.</p>';
+    } else {
+        const titleEl = document.createElement("p");
+        titleEl.innerHTML = `<strong>📌 ${escapeHtml(ez.title)}</strong> (<a href="${escapeHtml(ez.url)}" target="_blank" rel="noopener noreferrer">원문 보기 ↗</a>)`;
+        evEzinitBox.appendChild(titleEl);
+
+        if (ez.summary) {
+            const sumEl = document.createElement("p");
+            sumEl.style.marginTop = "8px";
+            sumEl.textContent = ez.summary;
+            evEzinitBox.appendChild(sumEl);
+        }
+
+        if (ez.disclosures && ez.disclosures.length > 0) {
+            const discTitle = document.createElement("h4");
+            discTitle.style.marginTop = "12px";
+            discTitle.textContent = "📑 최근 DART 주요 공시";
+            evEzinitBox.appendChild(discTitle);
+            ez.disclosures.forEach((d) => {
+                const p = document.createElement("p");
+                p.textContent = `• [${d.date}] (${d.category}) ${d.title}`;
+                evEzinitBox.appendChild(p);
+            });
+        }
+    }
+
+    // 6구역: 동일업종 비교 & 증권사 최신 리포트
+    evExtraBox.innerHTML = "";
+    const peers = evidence.peers || [];
+    const researches = evidence.researches || [];
+
+    const peerBlock = document.createElement("div");
+    peerBlock.className = "evidence-block";
+    peerBlock.innerHTML = "<h4>🏢 동일업종 경쟁사 시세</h4>";
+    if (peers.length === 0) {
+        peerBlock.innerHTML += '<p class="muted-text">비교 종목 정보 없음</p>';
+    } else {
+        peers.forEach((p) => {
+            const item = document.createElement("p");
+            item.textContent = `• ${p.name}(${p.code}): ${formatNumber(p.close, "원")} (${p.change_rate > 0 ? "+" : ""}${p.change_rate ?? "-"}%)`;
+            peerBlock.appendChild(item);
+        });
+    }
+    evExtraBox.appendChild(peerBlock);
+
+    const resBlock = document.createElement("div");
+    resBlock.className = "evidence-block";
+    resBlock.innerHTML = "<h4>📝 증권사 최신 리포트</h4>";
+    if (researches.length === 0) {
+        resBlock.innerHTML += '<p class="muted-text">최신 리포트 없음</p>';
+    } else {
+        researches.forEach((r) => {
+            const item = document.createElement("p");
+            item.textContent = `• [${r.date}] ${r.firm} — ${r.title}`;
+            resBlock.appendChild(item);
+        });
+    }
+    evExtraBox.appendChild(resBlock);
+
     // 뉴스 리스트
     evNewsList.innerHTML = "";
     const news = evidence.news || [];
@@ -420,13 +587,15 @@ function renderEvidenceDashboard(evidence, useTool) {
 analysisInitForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const code = analysisCodeInput.value.trim();
+    const avgPrice = analysisAvgPriceInput.value.trim();
+    const quantity = analysisQtyInput.value.trim();
     const useTool = useToolCheck.checked;
 
     showGlobalErrors([]);
     analysisConversationId = "";
     analysisEvidenceCard.classList.add("hidden");
     analysisLoadingText.textContent = useTool
-        ? `'${code}' 네이버 금융·Serper 뉴스 수집 및 Dify 전문가 심층분석 중...`
+        ? `'${code}' 네이버 금융·우쎔AI·Serper 수집 및 Dify 개인 PB 분석 중...`
         : `'${code}' 도구 없이 Dify AI 단독 분석 요청 중...`;
     analysisLoading.classList.remove("hidden");
     analysisFetchBtn.disabled = true;
@@ -438,6 +607,8 @@ analysisInitForm.addEventListener("submit", async (e) => {
             body: JSON.stringify({
                 action: "init",
                 code,
+                avg_price: avgPrice,
+                quantity,
                 use_tool: useTool,
             }),
         });
@@ -449,7 +620,7 @@ analysisInitForm.addEventListener("submit", async (e) => {
             return;
         }
 
-        renderEvidenceDashboard(data.evidence, data.use_tool);
+        renderEvidenceDashboard(data.evidence, data.use_tool, data.user_position);
         if (data.collect_errors && data.collect_errors.length > 0) {
             showGlobalErrors(data.collect_errors);
         }
@@ -513,7 +684,7 @@ analysisChatForm.addEventListener("submit", async (e) => {
 
         analysisConversationId = data.conversation_id || analysisConversationId;
         if (data.evidence) {
-            renderEvidenceDashboard(data.evidence, data.use_tool);
+            renderEvidenceDashboard(data.evidence, data.use_tool, data.user_position);
         }
         appendChatMessage(analysisChatBox, "bot", data.answer || "(빈 응답)");
         console.log(`[ANALYSIS] 탭1 후속 채팅 응답 수신 (conv=${analysisConversationId})`);
@@ -549,11 +720,22 @@ document.querySelectorAll(".analysis-q-chip").forEach((btn) => {
     });
 });
 
+copyAnalysisBtn.addEventListener("click", () => {
+    const code = analysisCodeInput.value.trim() || "stock";
+    copyChatToClipboard(analysisChatBox, `종목 심층분석 (${code})`, copyAnalysisBtn);
+});
+
+saveAnalysisBtn.addEventListener("click", () => {
+    const code = analysisCodeInput.value.trim() || "stock";
+    downloadChatMarkdown(analysisChatBox, `종목 심층분석 (${code})`, `analysis_${code}.md`);
+});
+
 // =========================================================
 // 탭 2: 리밸런싱 도우미 (Dify 없음 · 순수 Python 계산)
 // =========================================================
 const rebalanceForm = document.getElementById("rebalanceForm");
 const rebalanceTickersInput = document.getElementById("rebalanceTickers");
+const rebalanceCapitalInput = document.getElementById("rebalanceCapital");
 const rebalanceBtn = document.getElementById("rebalanceBtn");
 const rebalanceLoading = document.getElementById("rebalanceLoading");
 const rebalanceResult = document.getElementById("rebalanceResult");
@@ -628,6 +810,42 @@ function renderRebalanceCharts(data) {
     });
 }
 
+function renderAssetStatsTable(data) {
+    if (!data || !data.optimal_portfolio) return;
+    const opt = data.optimal_portfolio;
+    const totalCapital = Number(rebalanceCapitalInput.value) || 0;
+
+    assetStatsTableBody.innerHTML = "";
+    data.tickers.forEach((code) => {
+        const stat = data.asset_stats[code] || {};
+        const weight = opt.weights[code] || 0;
+        const weightPct = (weight * 100).toFixed(2);
+        const latestPrice = stat.latest_price || 0;
+        const targetAmt = Math.round(totalCapital * weight);
+        const targetShares = latestPrice > 0 ? Math.floor(targetAmt / latestPrice) : 0;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${escapeHtml(code)}</td>
+            <td>${latestPrice ? formatNumber(latestPrice, "원") : "-"}</td>
+            <td><strong>${weightPct}%</strong></td>
+            <td><strong>${totalCapital > 0 ? formatNumber(targetAmt, "원") : "-"}</strong></td>
+            <td>${totalCapital > 0 && latestPrice > 0 ? formatNumber(targetShares, "주") : "-"}</td>
+            <td>${stat.annual_return ?? "-"}%</td>
+            <td>${stat.volatility ?? "-"}%</td>
+            <td>${stat.sharpe_ratio ?? "-"}</td>
+            <td class="neg-val">${stat.mdd ?? "-"}%</td>
+        `;
+        assetStatsTableBody.appendChild(tr);
+    });
+}
+
+rebalanceCapitalInput.addEventListener("input", () => {
+    if (lastRebalanceData) {
+        renderAssetStatsTable(lastRebalanceData);
+    }
+});
+
 rebalanceForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const raw = rebalanceTickersInput.value.trim();
@@ -671,21 +889,8 @@ rebalanceForm.addEventListener("submit", async (e) => {
             rebalanceSummaryGrid.appendChild(div);
         });
 
-        assetStatsTableBody.innerHTML = "";
-        data.tickers.forEach((code) => {
-            const stat = data.asset_stats[code] || {};
-            const weightPct = ((opt.weights[code] || 0) * 100).toFixed(2);
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td>${code}</td>
-                <td><strong>${weightPct}%</strong></td>
-                <td>${stat.annual_return ?? "-"}%</td>
-                <td>${stat.volatility ?? "-"}%</td>
-                <td>${stat.sharpe_ratio ?? "-"}</td>
-                <td class="neg-val">${stat.mdd ?? "-"}%</td>
-            `;
-            assetStatsTableBody.appendChild(tr);
-        });
+        lastRebalanceData = data;
+        renderAssetStatsTable(data);
 
         renderRebalanceCharts(data);
         rebalanceResult.classList.remove("hidden");
@@ -720,6 +925,8 @@ const techChatForm = document.getElementById("techChatForm");
 const techQuestionInput = document.getElementById("techQuestion");
 const techSendBtn = document.getElementById("techSendBtn");
 const resetTechChatBtn = document.getElementById("resetTechChatBtn");
+const copyTechBtn = document.getElementById("copyTechBtn");
+const saveTechBtn = document.getElementById("saveTechBtn");
 
 function renderTechCharts(data) {
     const ind = data.indicators;
@@ -763,6 +970,25 @@ function renderTechCharts(data) {
             scales: {
                 y: { min: 0, max: 100 },
             },
+            plugins: { legend: { position: "bottom" } },
+        },
+    });
+
+    if (macdChartInstance) macdChartInstance.destroy();
+    const mCtx = document.getElementById("macdChart").getContext("2d");
+    macdChartInstance = new Chart(mCtx, {
+        type: "line",
+        data: {
+            labels: data.dates,
+            datasets: [
+                { label: "MACD (12,26)", data: ind.macd, borderColor: "#2563eb", borderWidth: 2, pointRadius: 0 },
+                { label: "Signal (9)", data: ind.macd_signal, borderColor: "#f59e0b", borderWidth: 1.8, pointRadius: 0 },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
             plugins: { legend: { position: "bottom" } },
         },
     });
@@ -888,6 +1114,16 @@ document.querySelectorAll(".tech-q-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
         techQuestionInput.value = btn.dataset.q;
     });
+});
+
+copyTechBtn.addEventListener("click", () => {
+    const code = currentTechCode || "tech";
+    copyChatToClipboard(techChatBox, `기술지표 해설 (${code})`, copyTechBtn);
+});
+
+saveTechBtn.addEventListener("click", () => {
+    const code = currentTechCode || "tech";
+    downloadChatMarkdown(techChatBox, `기술지표 해설 (${code})`, `technical_${code}.md`);
 });
 
 // =========================================================

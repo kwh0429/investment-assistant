@@ -261,14 +261,56 @@ def api_chat_analysis():
         use_tool = bool(payload.get("use_tool", True))
         conversation_id = str(payload.get("conversation_id") or "").strip()
 
+        # 내 평단가 / 수량 (선택 입력)
+        raw_avg = payload.get("avg_price")
+        raw_qty = payload.get("quantity")
+        avg_price = float(raw_avg) if raw_avg not in (None, "", 0, "0") else None
+        quantity = int(float(raw_qty)) if raw_qty not in (None, "", 0, "0") else None
+
         logger.info(f"[REQUEST] POST /api/chat/analysis action={action}, code={code}, use_tool={use_tool}")
 
         evidence = None
         collect_errors = []
+        user_position = None
+
+        def _build_position_text(curr_price):
+            nonlocal user_position
+            if not avg_price or avg_price <= 0:
+                return ""
+            if curr_price and curr_price > 0:
+                ret_pct = round((curr_price - avg_price) / avg_price * 100, 2)
+                pnl = round((curr_price - avg_price) * quantity) if quantity else None
+                user_position = {
+                    "avg_price": avg_price,
+                    "quantity": quantity,
+                    "current_price": curr_price,
+                    "return_pct": ret_pct,
+                    "pnl": pnl,
+                }
+                qty_str = f", 보유수량 {quantity}주, 평가손익 {pnl:,}원" if quantity else ""
+                return f"\n[고객 실제 보유 현황]\n- 평균 매수가(평단가): {avg_price:,.0f}원\n- 현재가: {curr_price:,.0f}원\n- 현재 손익률: {ret_pct:+.2f}%{qty_str}\n반드시 고객의 이 평단가와 손익률을 기준으로 맞춤형 PB 전략(물타기/보유/비중축소/손절 기준선)을 제시하세요.\n"
+            return ""
+
+        def _compact_evidence(ev):
+            """Dify 토큰 절약 및 빠른 응답을 위해 핵심 필드 위주로 압축"""
+            return {
+                "code": ev.get("code"),
+                "name": ev.get("name"),
+                "snapshot": ev.get("snapshot"),
+                "market_indices": ev.get("market_indices"),
+                "consensus": ev.get("consensus"),
+                "investor_trends": (ev.get("investor_trends") or [])[:5],
+                "peers": (ev.get("peers") or [])[:3],
+                "researches": (ev.get("researches") or [])[:3],
+                "financials": ev.get("financials"),
+                "quarter_financials": (ev.get("quarter_financials") or [])[-4:],
+                "ezinit_analysis": ev.get("ezinit_analysis"),
+                "news": [{"title": n.get("title"), "source": n.get("source"), "published": n.get("published")} for n in (ev.get("news") or [])],
+            }
 
         if action == "init":
             if not code:
-                return jsonify({"error": "종목코드 6자리를 입력해 주세요."}), 400
+                return jsonify({"error": "종목코드 또는 종목명을 입력해 주세요."}), 400
 
             if use_tool:
                 evidence = collect_stock_data(code)
@@ -277,26 +319,32 @@ def api_chat_analysis():
                     return jsonify({"error": collect_errors[0], "evidence": evidence}), 400
 
                 stock_name = evidence.get("name") or code
+                resolved_code = evidence.get("code") or code
+                curr_price = (evidence.get("snapshot") or {}).get("current_price")
+                pos_text = _build_position_text(curr_price)
+                compact_json = json.dumps(_compact_evidence(evidence), ensure_ascii=False)
+
                 full_query = (
-                    f"당신은 사용자 전담 개인 PB(Private Banker)입니다. 아래 제공된 '{stock_name}({code})'의 "
-                    "실제 수집 데이터(JSON)만을 근거로, 고객을 위한 명확하고 실전적인 심층분석 리포트와 투자 전략을 작성해 주세요.\n\n"
+                    f"당신은 사용자 전담 개인 PB(Private Banker)입니다. 아래 제공된 '{stock_name}({resolved_code})'의 "
+                    "실제 수집 데이터(JSON)만을 근거로, 고객을 위한 명확하고 실전적인 심층분석 리포트와 투자 전략을 작성해 주세요.\n"
+                    f"{pos_text}\n"
                     "[개인 PB 작성 원칙]\n"
                     "1. '투자는 본인 책임', '상황에 따라 다릅니다' 같은 원론적이고 회피성 멘트는 절대 쓰지 마세요.\n"
                     "2. 데이터에 기반해 현재 포지션 의견(예: 비중 확대 / 보유 유지 / 분할 익절 / 관망 / 손절 주의)을 명확히 제시하세요.\n"
-                    "3. 주요 지지선(52주 최저·단기 저점)과 저항선(전고점 등)을 기준으로 구체적인 대응 전략을 제안하세요.\n"
-                    "4. 연간 실적에서 `is_consensus: true`인 연도는 확정 실적이 아닌 '증권사 예상치(E)'임을 반드시 구분해 서술하세요.\n"
+                    "3. 시장 지수(KOSPI/KOSDAQ) 대비 상대강도, 최근 5일 외국인/기관 수급, 증권사 목표주가, 우쎔AI 리포트/DART 공시까지 모두 종합해 판단하세요.\n"
+                    "4. 연간/분기 실적에서 `is_consensus: true`인 기간은 확정 실적이 아닌 '증권사 예상치(E)'임을 반드시 구분해 서술하세요.\n"
                     "5. 금액은 조/억 단위로 환산하고, 표·글머리 기호 등 깔끔한 마크다운으로 정리하세요.\n\n"
                     "[필수 분석 목차]\n"
                     "### 1. PB 종합 의견 (현재 스탠스 및 핵심 이유 1줄 요약)\n"
-                    "### 2. 기업 체급 및 시장 수급 (시가총액, 52주 위치, 외국인 소진율, 거래대금)\n"
-                    "### 3. 실적 성장성과 수익성 (매출·영업이익 추이, 영업이익률, ROE 변화)\n"
-                    "### 4. 밸류에이션 및 재무 건전성 (현재 PER vs 추정 PER, PBR, 부채비율, 배당)\n"
-                    "### 5. 최신 뉴스 핵심 이슈 및 구체적 대응 전략\n\n"
-                    f"[수집된 근거 데이터 JSON]\n{json.dumps(evidence, ensure_ascii=False)}"
+                    "### 2. 시장 대비 수급 및 체급 (KOSPI 대비 흐름, 외인/기관 5일 수급, 시가총액)\n"
+                    "### 3. 실적 성장성과 수익성 (연간·분기 실적 추이, 영업이익률, ROE)\n"
+                    "### 4. 밸류에이션 및 목표주가 괴리율 (현재 PER vs 추정 PER, PBR, 증권사 목표주가)\n"
+                    "### 5. 최신 뉴스·DART 공시 이슈 및 구체적 대응 전략 (지지선·목표가 라인)\n\n"
+                    f"[수집된 근거 데이터 JSON]\n{compact_json}"
                 )
             else:
                 full_query = (
-                    f"당신은 개인 전담 PB입니다. 종목코드 '{code}'에 대해 "
+                    f"당신은 개인 전담 PB입니다. '{code}' 종목에 대해 "
                     "명확한 투자 스탠스, 실적 흐름, 밸류에이션, 대응 전략을 5가지 목차로 단호하게 분석해 주세요."
                 )
 
@@ -318,11 +366,14 @@ def api_chat_analysis():
             )
 
             if not conversation_id and use_tool and code:
-                # '조회'를 누르지 않고 바로 질문한 경우에도 근거 수집 후 PB 프롬프트 적용
                 evidence = collect_stock_data(code)
                 collect_errors = evidence.get("errors", [])
+                curr_price = (evidence.get("snapshot") or {}).get("current_price")
+                pos_text = _build_position_text(curr_price)
+                compact_json = json.dumps(_compact_evidence(evidence), ensure_ascii=False)
                 full_query = (
-                    f"[근거 데이터 JSON]\n{json.dumps(evidence, ensure_ascii=False)}\n\n"
+                    f"[근거 데이터 JSON]\n{compact_json}\n"
+                    f"{pos_text}\n"
                     f"[사용자 질문]\n{question}"
                     f"{pb_directive}"
                 )
@@ -335,6 +386,7 @@ def api_chat_analysis():
             return jsonify({
                 "error": dify_res["error"],
                 "evidence": evidence,
+                "user_position": user_position,
                 "collect_errors": collect_errors,
             }), 502 if "API Key" not in dify_res["error"] else 400
 
@@ -344,6 +396,7 @@ def api_chat_analysis():
             "conversation_id": dify_res["conversation_id"],
             "use_tool": use_tool,
             "evidence": evidence,
+            "user_position": user_position,
             "collect_errors": collect_errors,
         }), 200
 

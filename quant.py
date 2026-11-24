@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import FinanceDataReader as fdr
 import numpy as np
 import pandas as pd
+from collector import resolve_stock_code
 
 logger = logging.getLogger(__name__)
 
@@ -84,12 +85,18 @@ def calculate_rebalancing(tickers, num_simulations=3000):
     단순화 몬테카를로 시뮬레이션(3,000회) 및 효율적 프론티어 최적 비중 계산
     """
     errors = []
-    # 중복 제거 및 순서 유지
+    # 종목명 -> 코드 변환 및 중복 제거
     clean_tickers = []
     for t in tickers or []:
-        code = str(t).strip()
-        if code and code not in clean_tickers:
-            clean_tickers.append(code)
+        raw_item = str(t).strip()
+        if not raw_item:
+            continue
+        resolved_code, r_err = resolve_stock_code(raw_item)
+        if r_err or not resolved_code:
+            errors.append(r_err or f"'{raw_item}' 코드를 찾을 수 없습니다.")
+            continue
+        if resolved_code not in clean_tickers:
+            clean_tickers.append(resolved_code)
 
     if len(clean_tickers) < 2:
         errors.append("리밸런싱을 계산하려면 서로 다른 종목/ETF 코드를 2개 이상 입력해야 합니다.")
@@ -111,7 +118,9 @@ def calculate_rebalancing(tickers, num_simulations=3000):
             errors.append(err)
             continue
         close_series_map[code] = df["Close"]
-        asset_stats[code] = calc_basic_metrics(df["Close"])
+        stats = calc_basic_metrics(df["Close"])
+        stats["latest_price"] = round(float(df["Close"].iloc[-1]), 0)
+        asset_stats[code] = stats
 
     valid_tickers = list(close_series_map.keys())
     if len(valid_tickers) < 2:
@@ -225,7 +234,16 @@ def calculate_technical_indicators(code, days=365, chart_days=120):
     [탭 3] FinanceDataReader 주가 데이터로 MA(5/20/60), RSI(14),
     MACD(12,26,9), 볼린저밴드(20,2)를 계산하여 차트용 배열과 최신 요약 숫자를 반환
     """
-    clean_code = (code or "").strip()
+    clean_code, resolve_err = resolve_stock_code(code)
+    if resolve_err or not clean_code:
+        return {
+            "code": (code or "").strip(),
+            "dates": [],
+            "close": [],
+            "indicators": {},
+            "latest_summary": {},
+            "errors": [resolve_err or "종목코드를 확인할 수 없습니다."],
+        }
     df, err = fetch_price_history(clean_code, days=days)
     if err:
         return {

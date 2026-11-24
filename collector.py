@@ -1,13 +1,18 @@
 import os
 import re
 import logging
+from concurrent.futures import ThreadPoolExecutor
 import requests
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
 # 네이버 금융 모바일/내부 REST API 기본 URL 및 매너 헤더
 NAVER_API_BASE = "https://m.stock.naver.com/api/stock"
+NAVER_INDEX_BASE = "https://m.stock.naver.com/api/index"
+NAVER_AC_URL = "https://ac.stock.naver.com/ac"
 SERPER_NEWS_URL = "https://google.serper.dev/news"
+EZINIT_ANALYSIS_URL = "https://portfolio.ezinit.com/community/stock_analysis"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -175,17 +180,61 @@ def fetch_basic_quote(code, errors):
         f"[PARSE] 스냅샷 파싱 완료 (name={name}, current_price={current_price}, "
         f"per={snapshot['per']}, pbr={snapshot['pbr']})"
     )
-    return name, snapshot
+
+    # 4. 네이버 integration 추가 데이터 (목표주가, 수급동향, 증권사 리포트, 동일업종 비교)
+    extra_naver = {
+        "consensus": {},
+        "investor_trends": [],
+        "researches": [],
+        "peers": [],
+    }
+
+    if integration_data:
+        cns = integration_data.get("consensusInfo") or {}
+        if cns:
+            extra_naver["consensus"] = {
+                "target_price": _clean_number(cns.get("priceTargetMean")),
+                "recomm_score": _clean_number(cns.get("recommMean"), as_float=True),
+                "date": cns.get("createDate"),
+            }
+
+        for dt in (integration_data.get("dealTrendInfos") or [])[:5]:
+            extra_naver["investor_trends"].append({
+                "date": dt.get("bizdate"),
+                "close": _clean_number(dt.get("closePrice")),
+                "foreigner_net": _clean_number(dt.get("foreignerPureBuyQuant")),
+                "organ_net": _clean_number(dt.get("organPureBuyQuant")),
+                "individual_net": _clean_number(dt.get("individualPureBuyQuant")),
+                "foreigner_ratio": _clean_number(dt.get("foreignerHoldRatio"), as_float=True),
+            })
+
+        for r in (integration_data.get("researches") or [])[:5]:
+            extra_naver["researches"].append({
+                "firm": r.get("bnm", ""),
+                "title": r.get("tit", ""),
+                "date": r.get("wdt", ""),
+            })
+
+        for p in (integration_data.get("industryCompareInfo") or [])[:5]:
+            extra_naver["peers"].append({
+                "code": p.get("itemCode", ""),
+                "name": p.get("stockName", ""),
+                "close": _clean_number(p.get("closePrice")),
+                "change_rate": _clean_number(p.get("fluctuationsRatio"), as_float=True),
+            })
+
+    return name, snapshot, extra_naver
 
 
-def fetch_financials(code, errors):
+def fetch_financials(code, errors, period_type="annual"):
     """
-    [3구역] 네이버 금융 finance/annual API에서
-    연간 기업실적분석(매출액, 영업이익, 순이익, 영업이익률, ROE, 부채비율 등)을 파싱하고
+    [3구역] 네이버 금융 finance/{annual|quarter} API에서
+    기업실적분석(매출액, 영업이익, 순이익, 영업이익률, ROE, 부채비율 등)을 파싱하고
     (E) 추정치 여부에 따라 is_consensus 신호등(True/False)을 부여
     """
-    annual_url = f"{NAVER_API_BASE}/{code}/finance/annual"
-    data = _request_naver_json(annual_url, errors)
+    endpoint = "annual" if period_type == "annual" else "quarter"
+    url = f"{NAVER_API_BASE}/{code}/finance/{endpoint}"
+    data = _request_naver_json(url, errors)
     if not data:
         return []
 
@@ -227,7 +276,7 @@ def fetch_financials(code, errors):
 
         financials.append({
             "period": p_title,
-            "period_type": "annual",
+            "period_type": endpoint,
             "is_consensus": is_consensus,
             "revenue": _get_eok_value("매출액", p_key),
             "operating_income": _get_eok_value("영업이익", p_key),
@@ -239,8 +288,109 @@ def fetch_financials(code, errors):
             "pbr": _get_ratio_value("PBR", p_key),
         })
 
-    logger.info(f"[PARSE] 연간 실적 파싱 완료 (code={code}, 기간수={len(financials)})")
+    logger.info(f"[PARSE] {endpoint} 실적 파싱 완료 (code={code}, 기간수={len(financials)})")
     return financials
+
+
+def fetch_market_indices():
+    """
+    네이버 금융 국내증시 메인(/market/stock/kr)의
+    코스피(KOSPI) 및 코스닥(KOSDAQ) 현재 지수와 등락률을 수집
+    """
+    indices = {}
+    for idx_code in ("KOSPI", "KOSDAQ"):
+        url = f"{NAVER_INDEX_BASE}/{idx_code}/basic"
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+            if resp.status_code == 200:
+                data = resp.json()
+                indices[idx_code] = {
+                    "name": data.get("stockName", idx_code),
+                    "value": _clean_number(data.get("closePrice"), as_float=True),
+                    "change_rate": _clean_number(data.get("fluctuationsRatio"), as_float=True),
+                }
+        except Exception as e:
+            logger.warning(f"[NAVER] {idx_code} 지수 조회 실패: {e}")
+
+    logger.info(f"[NAVER] 시장 지수 수집 완료: {list(indices.keys())}")
+    return indices
+
+
+def fetch_ezinit_analysis(code):
+    """
+    우쎔AI 종목분석(https://portfolio.ezinit.com/community/stock_analysis)에서
+    해당 종목코드의 최신 분석 리포트(핵심 답변 및 DART 공시)를 수집.
+    게시글이 없는 종목일 경우 None 반환 (오류 아님).
+    """
+    search_url = f"{EZINIT_ANALYSIS_URL}?search={code}"
+    logger.info(f"[EZINIT] 우쎔AI 종목분석 검색 시작 (code={code})")
+
+    try:
+        resp = requests.get(search_url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        if resp.status_code != 200:
+            logger.warning(f"[EZINIT] 검색 페이지 접근 실패 ({resp.status_code})")
+            return None
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        target_href = None
+        post_title = ""
+
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            txt = a.get_text(" ", strip=True)
+            if "/community/stock_analysis/" in href and f"({code})" in txt:
+                target_href = href
+                post_title = txt
+                break
+
+        if not target_href:
+            logger.info(f"[EZINIT] '{code}' 종목 분석 게시글 없음")
+            return None
+
+        detail_url = (
+            target_href if target_href.startswith("http")
+            else f"https://portfolio.ezinit.com{target_href}"
+        )
+        detail_resp = requests.get(detail_url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        if detail_resp.status_code != 200:
+            logger.warning(f"[EZINIT] 상세 리포트 접근 실패 ({detail_resp.status_code})")
+            return None
+
+        dsoup = BeautifulSoup(detail_resp.text, "html.parser")
+        for tag in dsoup.select("nav, header, footer, script, style"):
+            tag.decompose()
+
+        content_el = dsoup.select_one(".post-content, .article-content, .content, article, main")
+        full_text = content_el.get_text("\n", strip=True) if content_el else dsoup.get_text("\n", strip=True)
+
+        # 핵심 답변 섹션 추출
+        summary_text = ""
+        m = re.search(r"📊\s*핵심\s*답변\s*(.*?)(?=📌\s*핵심\s*지표|📑\s*최근\s*공시|$)", full_text, re.DOTALL)
+        if m:
+            summary_text = m.group(1).strip()
+
+        # 최근 공시(DART) 항목 추출 (최대 5건)
+        disclosures = []
+        for tr in dsoup.select("table tr"):
+            tds = [td.get_text(" ", strip=True) for td in tr.find_all("td")]
+            if len(tds) >= 3 and re.match(r"\d{4}-\d{2}-\d{2}", tds[0]):
+                disclosures.append({
+                    "date": tds[0],
+                    "category": tds[1],
+                    "title": tds[2].replace("↗", "").strip(),
+                })
+
+        logger.info(f"[EZINIT] 우쎔AI 리포트 수집 완료 (title={post_title}, 공시={len(disclosures)}건)")
+        return {
+            "title": post_title,
+            "url": detail_url,
+            "summary": summary_text,
+            "disclosures": disclosures[:5],
+        }
+
+    except Exception as e:
+        logger.warning(f"[EZINIT] 수집 중 예외 발생 (무시하고 계속 진행): {e}")
+        return None
 
 
 def fetch_news(stock_name, errors):
@@ -308,15 +458,64 @@ def fetch_news(stock_name, errors):
     return []
 
 
-def collect_stock_data(code):
-    """종목코드를 검증하고 전체 주식 데이터를 수집하여 규격 JSON(dict) 반환"""
+def resolve_stock_code(query):
+    """
+    사용자가 입력한 6자리 종목코드 또는 한글 종목명(예: 'SK하이닉스', 'KODEX 200')을
+    국내 6자리 종목코드로 변환한다.
+    반환: (code 또는 None, 오류 메시지 또는 None)
+    """
+    q = (query or "").strip()
+    if not q:
+        return None, "종목코드 또는 종목명을 입력해 주세요."
+
+    # 이미 6자리 국내 코드(숫자 6자리 또는 영문+숫자 6자리 ETF 코드)인 경우 그대로 반환
+    if re.fullmatch(r"\d{6}|[0-9A-Za-z]{6}", q) and any(ch.isdigit() for ch in q):
+        return q.upper(), None
+
+    logger.info(f"[NAVER] 종목명 -> 종목코드 자동 검색 시작 (query={q})")
+    try:
+        resp = requests.get(
+            NAVER_AC_URL,
+            params={"q": q, "target": "stock"},
+            headers=HEADERS,
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            return None, f"종목명 검색 API 호출에 실패했습니다 ({resp.status_code})."
+
+        items = resp.json().get("items", [])
+        kor_items = [
+            it for it in items
+            if it.get("nationCode") == "KOR" and it.get("code")
+        ]
+        if not kor_items:
+            return None, f"'{q}'에 해당하는 국내 종목을 찾을 수 없습니다. 정확한 종목명이나 6자리 코드를 입력해 주세요."
+
+        # 정확히 이름이 일치하는 항목 최우선 선택
+        q_norm = q.replace(" ", "").upper()
+        for it in kor_items:
+            if (it.get("name") or "").replace(" ", "").upper() == q_norm:
+                logger.info(f"[NAVER] 종목코드 매핑 완료: {q} -> {it['code']} ({it.get('name')})")
+                return it["code"], None
+
+        first = kor_items[0]
+        logger.info(f"[NAVER] 종목코드 매핑 완료(최상단): {q} -> {first['code']} ({first.get('name')})")
+        return first["code"], None
+
+    except Exception as e:
+        logger.error(f"[ERROR] 종목명 검색 중 오류 발생 (query={q})", exc_info=True)
+        return None, f"종목명 검색 중 오류가 발생했습니다: {e}"
+
+
+def collect_stock_data(code_or_name):
+    """종목코드 또는 종목명을 검증/변환하고 전체 주식 데이터를 병렬 수집하여 규격 JSON(dict) 반환"""
     errors = []
-    clean_code = (code or "").strip()
+    clean_code, resolve_err = resolve_stock_code(code_or_name)
 
-    if not clean_code:
-        errors.append("종목코드가 입력되지 않았습니다.")
+    if resolve_err or not clean_code:
+        errors.append(resolve_err or "종목코드를 확인할 수 없습니다.")
         return {
-            "code": "",
+            "code": (code_or_name or "").strip(),
             "name": None,
             "snapshot": {},
             "financials": [],
@@ -324,26 +523,40 @@ def collect_stock_data(code):
             "errors": errors,
         }
 
-    if not re.fullmatch(r"\d{6}", clean_code):
-        errors.append("종목코드는 6자리 숫자여야 합니다. (예: 000660)")
-        return {
-            "code": clean_code,
-            "name": None,
-            "snapshot": {},
-            "financials": [],
-            "news": [],
-            "errors": errors,
-        }
+    # 1단계: 기본 시세 + 정식 종목명 확보 (뉴스 검색어 확보를 위해 선행)
+    name, snapshot, extra_naver = fetch_basic_quote(clean_code, errors)
 
-    name, snapshot = fetch_basic_quote(clean_code, errors)
-    financials = fetch_financials(clean_code, errors)
-    news = fetch_news(name, errors)
+    # 2단계: 연간실적, 분기실적, 시장지수, 우쎔AI, Serper뉴스 5개 작업 동시 병렬 수집
+    annual_errors, quarter_errors, news_errors = [], [], []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        fut_annual = executor.submit(fetch_financials, clean_code, annual_errors, "annual")
+        fut_quarter = executor.submit(fetch_financials, clean_code, quarter_errors, "quarter")
+        fut_market = executor.submit(fetch_market_indices)
+        fut_ezinit = executor.submit(fetch_ezinit_analysis, clean_code)
+        fut_news = executor.submit(fetch_news, name, news_errors)
+
+        financials = fut_annual.result()
+        quarter_financials = fut_quarter.result()
+        market_indices = fut_market.result()
+        ezinit_analysis = fut_ezinit.result()
+        news = fut_news.result()
+
+    errors.extend(annual_errors)
+    errors.extend(quarter_errors)
+    errors.extend(news_errors)
 
     return {
         "code": clean_code,
         "name": name,
         "snapshot": snapshot,
+        "market_indices": market_indices,
+        "consensus": extra_naver.get("consensus", {}),
+        "investor_trends": extra_naver.get("investor_trends", []),
+        "researches": extra_naver.get("researches", []),
+        "peers": extra_naver.get("peers", []),
         "financials": financials,
+        "quarter_financials": quarter_financials,
+        "ezinit_analysis": ezinit_analysis,
         "news": news,
         "errors": errors,
     }

@@ -58,9 +58,24 @@
                         type="text"
                         id="analysisCode"
                         class="search-input"
-                        placeholder="종목코드 6자리 입력 (예: 000660)"
-                        maxlength="6"
+                        placeholder="종목코드 또는 종목명 입력 (예: 000660, SK하이닉스)"
                         value="000660"
+                    >
+                    <input
+                        type="number"
+                        id="analysisAvgPrice"
+                        class="search-input"
+                        style="max-width: 170px;"
+                        placeholder="내 평단가(원, 선택)"
+                        min="0"
+                    >
+                    <input
+                        type="number"
+                        id="analysisQty"
+                        class="search-input"
+                        style="max-width: 140px;"
+                        placeholder="보유 수량(주)"
+                        min="0"
                     >
                     <label class="toggle-label">
                         <input type="checkbox" id="useToolCheck" checked>
@@ -104,6 +119,14 @@
                         </div>
                     </div>
 
+                    <div id="evUserPositionBox" class="hidden" style="margin-bottom: 16px;">
+                        <div class="grid-divider">💼 내 계좌 보유 현황 (자동 계산)</div>
+                        <div id="evUserPositionGrid" class="metrics-grid"></div>
+                    </div>
+
+                    <div class="grid-divider">0구역 · 시장 지수 &amp; 증권사 목표주가</div>
+                    <div id="evMarketConsensusGrid" class="metrics-grid"></div>
+
                     <div class="grid-divider">1구역 · 당일 시세 정보</div>
                     <div id="evQuoteGrid" class="metrics-grid"></div>
 
@@ -120,6 +143,35 @@
                         </table>
                     </div>
 
+                    <div class="grid-divider" style="margin-top: 22px;">
+                        4구역 · 최근 5거래일 투자자별 수급 동향 (순매수 주)
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="evTrendsTable" class="financials-table">
+                            <thead>
+                                <tr>
+                                    <th>일자</th>
+                                    <th>종가</th>
+                                    <th>외국인</th>
+                                    <th>기관</th>
+                                    <th>개인</th>
+                                    <th>외인 지분율</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+
+                    <div class="grid-divider" style="margin-top: 22px;">
+                        5구역 · 우쎔AI 리포트 &amp; DART 공시 (portfolio.ezinit.com)
+                    </div>
+                    <div id="evEzinitBox" class="evidence-panel" style="max-height: none;"></div>
+
+                    <div class="grid-divider" style="margin-top: 22px;">
+                        6구역 · 동일업종 비교 &amp; 증권사 최신 리포트
+                    </div>
+                    <div id="evExtraBox" class="evidence-panel" style="max-height: none;"></div>
+
                     <div class="grid-divider" style="margin-top: 22px;">📰 최신 관련 뉴스 (Serper News)</div>
                     <ul id="evNewsList" class="news-list"></ul>
                 </div>
@@ -131,6 +183,10 @@
                     <div>
                         <h3>🤖 Dify 심층분석 채팅 (근거 기반 후속 질의응답)</h3>
                         <p class="section-desc">위에서 조회한 종목 데이터와 1차 리포트를 기억한 상태로 대화가 이어집니다.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button type="button" id="copyAnalysisBtn" class="btn btn-secondary btn-sm">📋 대화 복사</button>
+                        <button type="button" id="saveAnalysisBtn" class="btn btn-secondary btn-sm">💾 .md 저장</button>
                     </div>
                 </div>
                 <div id="analysisChatBox" class="chat-box tall-chat">
@@ -172,8 +228,18 @@
                         type="text"
                         id="rebalanceTickers"
                         class="search-input"
-                        placeholder="종목/ETF 코드 2개 이상을 쉼표(,)로 구분해 입력 (예: 005930, 000660, 069500)"
+                        placeholder="종목/ETF 코드 또는 이름 2개 이상을 쉼표(,)로 구분해 입력 (예: 삼성전자, SK하이닉스, KODEX 200)"
                         value="005930, 000660, 069500"
+                    >
+                    <input
+                        type="number"
+                        id="rebalanceCapital"
+                        class="search-input"
+                        style="max-width: 210px;"
+                        placeholder="총 투자금액(원)"
+                        value="10000000"
+                        min="0"
+                        step="100000"
                     >
                     <button type="submit" id="rebalanceBtn" class="btn btn-primary">최적 비중 계산</button>
                 </form>
@@ -220,7 +286,10 @@
                             <thead>
                                 <tr>
                                     <th>종목코드</th>
+                                    <th>현재가</th>
                                     <th>권장 비중</th>
+                                    <th>권장 매수금액</th>
+                                    <th>예상 주수</th>
                                     <th>연율화 수익률</th>
                                     <th>연율화 변동성</th>
                                     <th>샤프지수</th>
@@ -251,8 +320,7 @@
                         type="text"
                         id="techCode"
                         class="search-input"
-                        placeholder="종목코드 6자리 입력 (예: 000660)"
-                        maxlength="6"
+                        placeholder="종목코드 또는 종목명 입력 (예: 000660, SK하이닉스)"
                         value="000660"
                     >
                     <button type="submit" id="techSearchBtn" class="btn btn-primary">차트 &amp; 지표 계산</button>
@@ -293,6 +361,14 @@
                     </div>
                 </div>
 
+                <!-- MACD 차트 (3번째 차트) -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>📶 MACD (12, 26, 9) &amp; Signal 추이</h3>
+                    <div class="chart-container">
+                        <canvas id="macdChart"></canvas>
+                    </div>
+                </div>
+
                 <!-- 기술지표 설명 전용 Dify 챗봇③ -->
                 <div class="card chat-card">
                     <div class="panel-header">
@@ -300,7 +376,11 @@
                             <h3>🤖 기술지표 설명 전용 챗봇 (Dify 챗봇③)</h3>
                             <p class="section-desc">질문 시 위에 계산된 최신 숫자(latest_summary)가 보이지 않게 자동 주입됩니다.</p>
                         </div>
-                        <button type="button" id="resetTechChatBtn" class="btn btn-secondary btn-sm">새 대화</button>
+                        <div class="header-actions">
+                            <button type="button" id="copyTechBtn" class="btn btn-secondary btn-sm">📋 대화 복사</button>
+                            <button type="button" id="saveTechBtn" class="btn btn-secondary btn-sm">💾 .md 저장</button>
+                            <button type="button" id="resetTechChatBtn" class="btn btn-secondary btn-sm">새 대화</button>
+                        </div>
                     </div>
                     <div id="techChatBox" class="chat-box">
                         <div class="chat-msg bot">
