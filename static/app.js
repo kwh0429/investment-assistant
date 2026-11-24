@@ -615,7 +615,7 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
     analysisEvidenceCard.classList.remove("hidden");
 }
 
-// 1단계: 종목 조회 및 전문가 1차 분석 실행
+// 1단계: 종목 조회(/fetch) -> 대시보드 즉시 표시 -> 2단계: 전문가 1차 리포트 생성(/api/chat/analysis)
 analysisInitForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const code = analysisCodeInput.value.trim();
@@ -626,11 +626,48 @@ analysisInitForm.addEventListener("submit", async (e) => {
     showGlobalErrors([]);
     analysisConversationId = "";
     analysisEvidenceCard.classList.add("hidden");
-    analysisLoadingText.textContent = `'${code}' 데이터 분석 중...`;
+    analysisLoadingText.textContent = `'${code}' 데이터 수집 중...`;
     analysisLoading.classList.remove("hidden");
     analysisFetchBtn.disabled = true;
 
     try {
+        let fetchedEvidence = null;
+
+        if (useTool) {
+            const fetchRes = await fetch("/fetch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code }),
+            });
+            const fetchData = await fetchRes.json();
+            if (!fetchRes.ok) {
+                showGlobalErrors(fetchData.errors || ["종목 데이터 수집에 실패했습니다."]);
+                return;
+            }
+            fetchedEvidence = fetchData;
+
+            // 평단가/수량 화면 미리 계산
+            let previewPos = null;
+            const currP = fetchData.snapshot?.current_price;
+            const avgNum = Number(avgPrice);
+            const qtyNum = Number(quantity);
+            if (currP && avgNum > 0) {
+                previewPos = {
+                    avg_price: avgNum,
+                    current_price: currP,
+                    return_pct: Number((((currP - avgNum) / avgNum) * 100).toFixed(2)),
+                    quantity: qtyNum > 0 ? qtyNum : null,
+                    pnl: qtyNum > 0 ? Math.round((currP - avgNum) * qtyNum) : null,
+                };
+            }
+            renderEvidenceDashboard(fetchedEvidence, true, previewPos);
+            if (fetchData.errors && fetchData.errors.length > 0) {
+                showGlobalErrors(fetchData.errors);
+            }
+        }
+
+        analysisLoadingText.textContent = `'${code}' 데이터 분석 중...`;
+
         const res = await fetch("/api/chat/analysis", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -640,21 +677,28 @@ analysisInitForm.addEventListener("submit", async (e) => {
                 avg_price: avgPrice,
                 quantity,
                 use_tool: useTool,
+                evidence: fetchedEvidence,
                 beginner_mode: isBeginnerMode,
                 pro_mode: isProMode,
             }),
         });
-        const data = await res.json();
+
+        let data;
+        try {
+            data = await res.json();
+        } catch {
+            showGlobalErrors(["AI 응답 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."]);
+            return;
+        }
 
         if (!res.ok) {
-            showGlobalErrors([data.error || "종목 조회 및 분석에 실패했습니다."]);
+            showGlobalErrors([data.error || "종목 분석에 실패했습니다."]);
             console.error("[ERROR] 탭1 조회·분석 오류", data.error);
             return;
         }
 
-        renderEvidenceDashboard(data.evidence, data.use_tool, data.user_position);
-        if (data.collect_errors && data.collect_errors.length > 0) {
-            showGlobalErrors(data.collect_errors);
+        if (data.user_position) {
+            renderUserPosition(data.user_position);
         }
 
         analysisConversationId = data.conversation_id || "";
@@ -662,13 +706,13 @@ analysisInitForm.addEventListener("submit", async (e) => {
         appendChatMessage(
             analysisChatBox,
             "user",
-            `[${code} / ${useTool ? "도구근거 ON" : "도구근거 OFF"}] 종목 데이터 조회 및 심층분석 요청`
+            `[${code} / ${useTool ? "실시간 데이터" : "데이터 미연동"}] 종목 조회 및 심층 분석`
         );
         appendChatMessage(analysisChatBox, "bot", data.answer || "(빈 응답)");
 
-        console.log(`[ANALYSIS] 탭1 종목 조회 및 1차 전문가 분석 완료 (code=${code}, conv=${analysisConversationId})`);
+        console.log(`[ANALYSIS] 탭1 종목 조회 및 1차 분석 완료 (code=${code}, conv=${analysisConversationId})`);
     } catch (err) {
-        showGlobalErrors(["서버와 통신하는 중 네트워크 오류가 발생했습니다."]);
+        showGlobalErrors(["서버와 통신하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."]);
         console.error("[ERROR] 탭1 조회 통신 오류", err);
     } finally {
         analysisLoading.classList.add("hidden");

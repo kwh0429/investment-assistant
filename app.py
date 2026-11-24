@@ -316,10 +316,16 @@ def api_chat_analysis():
                 return jsonify({"error": "종목코드 또는 종목명을 입력해 주세요."}), 400
 
             if use_tool:
-                evidence = collect_stock_data(code)
-                collect_errors = evidence.get("errors", [])
-                if not evidence.get("name") and not evidence.get("snapshot") and collect_errors:
-                    return jsonify({"error": collect_errors[0], "evidence": evidence}), 400
+                # 프론트엔드가 이미 /fetch로 수집한 evidence를 넘겨주었으면 재수집 생략 (속도/타임아웃 최적화)
+                provided_ev = payload.get("evidence")
+                if isinstance(provided_ev, dict) and provided_ev.get("name"):
+                    evidence = provided_ev
+                    collect_errors = evidence.get("errors", [])
+                else:
+                    evidence = collect_stock_data(code)
+                    collect_errors = evidence.get("errors", [])
+                    if not evidence.get("name") and not evidence.get("snapshot") and collect_errors:
+                        return jsonify({"error": collect_errors[0], "evidence": evidence}), 400
 
                 stock_name = evidence.get("name") or code
                 resolved_code = evidence.get("code") or code

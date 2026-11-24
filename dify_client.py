@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_DIFY_BASE_URL = "https://api.dify.ai/v1"
 DEFAULT_PRIMARY_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_FALLBACK_MODELS = "gemini-3.1-flash-lite,gemma-4-26b-a4b-it"
-DIFY_TIMEOUT = 45
+DIFY_TIMEOUT = 8
 
 
 def get_gemini_model_chain():
@@ -120,63 +120,52 @@ def call_dify_chatbot(bot_type, query, conversation_id="", user_id="investment-a
     last_err_msg = ""
     should_fallback_to_gemini = False
 
-    for attempt in range(2):
-        logger.info(
-            f"[DIFY] Dify 챗봇 API 호출 시작 (bot={bot_type}, attempt={attempt + 1}, "
-            f"conversation_id={conversation_id or 'NEW'})"
-        )
+    logger.info(
+        f"[DIFY] Dify 챗봇 API 호출 시작 (bot={bot_type}, conversation_id={conversation_id or 'NEW'})"
+    )
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=DIFY_TIMEOUT)
+
+        if resp.status_code == 200:
+            data = resp.json()
+            answer = data.get("answer", "")
+            new_conv_id = data.get("conversation_id", conversation_id)
+            logger.info(f"[DIFY] Dify 챗봇 응답 수신 완료 (bot={bot_type}, conv_id={new_conv_id}, len={len(answer)})")
+            return {"answer": answer, "conversation_id": new_conv_id, "error": None}
+
+        if resp.status_code == 401:
+            msg = f"Dify API Key({key_name}) 인증에 실패했습니다 (401). 키 값을 확인해 주세요."
+            logger.error(f"[ERROR] Dify 401 인증 오류 (bot={bot_type})")
+            return {"answer": "", "conversation_id": conversation_id, "error": msg}
+
+        if resp.status_code == 404:
+            msg = "Dify 챗봇 앱 또는 대화 세션을 찾을 수 없습니다 (404)."
+            logger.error(f"[ERROR] Dify 404 응답 (bot={bot_type})")
+            return {"answer": "", "conversation_id": conversation_id, "error": msg}
+
+        err_detail = ""
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=DIFY_TIMEOUT)
-
-            if resp.status_code == 200:
-                data = resp.json()
-                answer = data.get("answer", "")
-                new_conv_id = data.get("conversation_id", conversation_id)
-                logger.info(f"[DIFY] Dify 챗봇 응답 수신 완료 (bot={bot_type}, conv_id={new_conv_id}, len={len(answer)})")
-                return {"answer": answer, "conversation_id": new_conv_id, "error": None}
-
-            if resp.status_code == 401:
-                msg = f"Dify API Key({key_name}) 인증에 실패했습니다 (401). 키 값을 확인해 주세요."
-                logger.error(f"[ERROR] Dify 401 인증 오류 (bot={bot_type})")
-                return {"answer": "", "conversation_id": conversation_id, "error": msg}
-
-            if resp.status_code == 404:
-                msg = "Dify 챗봇 앱 또는 대화 세션을 찾을 수 없습니다 (404)."
-                logger.error(f"[ERROR] Dify 404 응답 (bot={bot_type})")
-                return {"answer": "", "conversation_id": conversation_id, "error": msg}
-
-            err_detail = ""
-            try:
-                err_detail = resp.json().get("message", "")
-            except ValueError:
-                err_detail = resp.text[:150]
-
-            last_err_msg = f"Dify API 호출 실패 (상태코드: {resp.status_code}) {err_detail}".strip()
-            logger.warning(f"[DIFY] 비정상 응답({resp.status_code}, attempt={attempt + 1}): {err_detail}")
-
-            if _is_transient_overload(resp.status_code, err_detail):
-                should_fallback_to_gemini = True
-                if attempt == 0:
-                    time.sleep(1.5)
-                    continue
-            break
-
-        except requests.exceptions.Timeout:
-            last_err_msg = "Dify 챗봇 응답 시간이 초과되었습니다 (네트워크 타임아웃)."
-            logger.warning(f"[DIFY] 타임아웃 (bot={bot_type}, attempt={attempt + 1})")
-            should_fallback_to_gemini = True
-            if attempt == 0:
-                time.sleep(1.0)
-                continue
-        except requests.exceptions.RequestException as e:
-            last_err_msg = f"Dify 서버 연결 중 네트워크 오류가 발생했습니다: {e}"
-            logger.error(f"[ERROR] Dify API 요청 실패 (bot={bot_type})", exc_info=True)
-            should_fallback_to_gemini = True
-            break
+            err_detail = resp.json().get("message", "")
         except ValueError:
-            last_err_msg = "Dify API 응답을 JSON으로 변환하는 데 실패했습니다."
-            logger.error(f"[ERROR] Dify API JSON 변환 실패 (bot={bot_type})", exc_info=True)
-            break
+            err_detail = resp.text[:150]
+
+        last_err_msg = f"Dify API 호출 실패 (상태코드: {resp.status_code}) {err_detail}".strip()
+        logger.warning(f"[DIFY] 비정상 응답({resp.status_code}): {err_detail}")
+
+        if _is_transient_overload(resp.status_code, err_detail):
+            should_fallback_to_gemini = True
+
+    except requests.exceptions.Timeout:
+        last_err_msg = "Dify 챗봇 응답 시간 초과"
+        logger.warning(f"[DIFY] 타임아웃 ({DIFY_TIMEOUT}s, bot={bot_type}) -> 백업 모델 전환")
+        should_fallback_to_gemini = True
+    except requests.exceptions.RequestException as e:
+        last_err_msg = f"Dify 서버 연결 중 네트워크 오류가 발생했습니다: {e}"
+        logger.error(f"[ERROR] Dify API 요청 실패 (bot={bot_type})", exc_info=True)
+        should_fallback_to_gemini = True
+    except ValueError:
+        last_err_msg = "Dify API 응답을 JSON으로 변환하는 데 실패했습니다."
+        logger.error(f"[ERROR] Dify API JSON 변환 실패 (bot={bot_type})", exc_info=True)
 
     # Dify가 일시적 과부하로 실패한 경우 -> Gemini 폴백 체인으로 자동 우회
     if should_fallback_to_gemini and os.getenv("GEMINI_API_KEY", "").strip():
