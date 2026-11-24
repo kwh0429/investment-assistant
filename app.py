@@ -619,17 +619,17 @@ def api_daily_pick():
   "target_price": 235000,
   "stop_loss_price": 176000,
   "expected_return_pct": 25.0,
-  "company_intro": "기업의 핵심 사업, 시장 지위, 주요 수익원을 3~4문장으로 알기 쉽게 소개",
+  "company_intro": "기업의 핵심 사업, 시장 지위, 주요 수익원을 2문장으로 간결하게 소개",
   "selection_reasons": [
-    "1. 밸류에이션/실적 근거: 구체적 수치 인용",
-    "2. 수급/시장 흐름 근거: 외인·기관 수급 및 목표주가 인용",
-    "3. 기술적 위치 근거: RSI, 이평선, 볼린저밴드 수치 인용",
-    "4. 뉴스·공시 모멘텀 근거: 최신 이슈 인용"
+    "1. 밸류에이션/실적 근거: 구체적 수치 인용 (1문장)",
+    "2. 수급/시장 흐름 근거: 외인·기관 수급 및 목표주가 인용 (1문장)",
+    "3. 기술적 위치 근거: RSI, 이평선, 볼린저밴드 수치 인용 (1문장)",
+    "4. 뉴스·공시 모멘텀 근거: 최신 이슈 인용 (1문장)"
   ],
-  "price_rationale": "진입가격과 예상판매가(목표가), 손절가를 해당 가격대로 설정한 기술적·수급적 근거 2~3문장",
-  "risk_note": "투자 시 주의해야 할 핵심 리스크 1~2문장",
+  "price_rationale": "진입가·예상판매가·손절가 산정 근거 1~2문장",
+  "risk_note": "핵심 리스크 1문장",
   "candidates_summary": [
-    {{"code": "코드", "name": "종목명", "current_price": 0, "per": 0, "rsi14": 0, "comment": "선정 또는 제외 사유 한 줄 요약"}}
+    {{"code": "코드", "name": "종목명", "current_price": 0, "per": 0, "rsi14": 0, "comment": "선정 또는 제외 사유 한 줄"}}
   ]
 }}
 
@@ -637,7 +637,14 @@ def api_daily_pick():
 {json.dumps(candidates_data, ensure_ascii=False)}
 """
 
-        fb = call_gemini_with_fallback(prompt)
+        fb = call_gemini_with_fallback(
+            prompt,
+            config={
+                "response_mime_type": "application/json",
+                "temperature": 0.2,
+                "max_output_tokens": 900,
+            },
+        )
         if fb.get("error"):
             return jsonify({"error": fb["error"]}), 502
 

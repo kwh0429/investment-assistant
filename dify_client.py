@@ -28,7 +28,7 @@ def get_gemini_model_chain():
     return chain
 
 
-def call_gemini_with_fallback(prompt):
+def call_gemini_with_fallback(prompt, config=None):
     """
     Google AI Studio API를 1순위 -> 2순위 -> 3순위 모델 순서로 호출한다.
     문제가 생기면 자동으로 다음 순위 모델로 전환한다.
@@ -43,16 +43,19 @@ def call_gemini_with_fallback(prompt):
         }
 
     model_chain = get_gemini_model_chain()
-    client = genai.Client(api_key=gemini_key, http_options={"timeout": 12000})
+    client = genai.Client(api_key=gemini_key, http_options={"timeout": 10000})
     last_error = ""
 
     for idx, model_name in enumerate(model_chain):
         try:
             logger.info(f"[GEMINI] 모델 호출 시도 ({idx + 1}/{len(model_chain)}): {model_name}")
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
+            kwargs = {"model": model_name, "contents": prompt}
+            if config:
+                req_cfg = dict(config)
+                if model_name.startswith("gemma"):
+                    req_cfg.pop("response_mime_type", None)
+                kwargs["config"] = req_cfg
+            response = client.models.generate_content(**kwargs)
             text = (response.text or "").strip()
             if text:
                 logger.info(f"[GEMINI] 응답 생성 성공 (model={model_name}, len={len(text)})")

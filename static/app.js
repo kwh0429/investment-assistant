@@ -1297,15 +1297,26 @@ async function loadDailyPick(forceRefresh = false) {
             if (loadingSpan) {
                 loadingSpan.textContent = "수집된 데이터를 바탕으로 오늘의 종목을 선정 중입니다...";
             }
-            const res = await fetch("/api/daily-pick", {
+            const pickBody = JSON.stringify({
+                force_refresh: forceRefresh,
+                beginner_mode: isBeginnerMode,
+                candidates: candData.candidates || [],
+            });
+            let res = await fetch("/api/daily-pick", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    force_refresh: forceRefresh,
-                    beginner_mode: isBeginnerMode,
-                    candidates: candData.candidates || [],
-                }),
+                body: pickBody,
             });
+            if (res.status === 502 || res.status === 504) {
+                if (loadingSpan) {
+                    loadingSpan.textContent = "응답이 지연되어 재시도하고 있습니다...";
+                }
+                res = await fetch("/api/daily-pick", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: pickBody,
+                });
+            }
             try {
                 data = await res.json();
             } catch {
