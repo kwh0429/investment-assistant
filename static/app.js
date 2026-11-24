@@ -6,6 +6,7 @@ let techConversationId = "";
 let currentTechCode = "";
 let currentTechSummary = null;
 let lastRebalanceData = null;
+let isBeginnerMode = localStorage.getItem("beginnerMode") === "true";
 
 // Chart.js 인스턴스 (재조회 시 destroy 필수)
 let weightChartInstance = null;
@@ -18,6 +19,7 @@ let macdChartInstance = null;
 // 공용 DOM 및 유틸리티
 // =========================================================
 const healthBadge = document.getElementById("healthBadge");
+const beginnerModeBtn = document.getElementById("beginnerModeBtn");
 const globalErrorBox = document.getElementById("globalErrorBox");
 const globalErrorList = document.getElementById("globalErrorList");
 
@@ -619,6 +621,7 @@ analysisInitForm.addEventListener("submit", async (e) => {
                 avg_price: avgPrice,
                 quantity,
                 use_tool: useTool,
+                beginner_mode: isBeginnerMode,
             }),
         });
         const data = await res.json();
@@ -679,6 +682,7 @@ analysisChatForm.addEventListener("submit", async (e) => {
                 question,
                 use_tool: useTool,
                 conversation_id: analysisConversationId,
+                beginner_mode: isBeginnerMode,
             }),
         });
         const data = await res.json();
@@ -1084,6 +1088,7 @@ techChatForm.addEventListener("submit", async (e) => {
                 question,
                 latest_summary: currentTechSummary,
                 conversation_id: techConversationId,
+                beginner_mode: isBeginnerMode,
             }),
         });
         const data = await res.json();
@@ -1136,9 +1141,23 @@ saveTechBtn.addEventListener("click", () => {
 });
 
 // =========================================================
-// 초기화
+// 초보자 모드 토글 & 초기화
 // =========================================================
+function applyBeginnerMode(enabled) {
+    isBeginnerMode = enabled;
+    localStorage.setItem("beginnerMode", enabled ? "true" : "false");
+    document.body.classList.toggle("beginner-mode", enabled);
+    beginnerModeBtn.classList.toggle("active", enabled);
+    beginnerModeBtn.textContent = enabled ? "🐥 초보자 모드: ON" : "🐥 초보자 모드: OFF";
+}
+
+beginnerModeBtn.addEventListener("click", () => {
+    applyBeginnerMode(!isBeginnerMode);
+    console.log(`[PAGE] 초보자 모드 ${isBeginnerMode ? "켜짐" : "꺼짐"}`);
+});
+
 document.addEventListener("DOMContentLoaded", () => {
+    applyBeginnerMode(isBeginnerMode);
     initTabs();
     checkServerHealth();
     console.log("[PAGE] 페이지 로드 및 탭 초기화 완료");

@@ -16,6 +16,7 @@
                 <p class="subtitle">근거 기반 Dify 심층분석 · 파이썬 몬테카를로 리밸런싱 · FDR 기술지표 AI 설명</p>
             </div>
             <div class="header-actions">
+                <button type="button" id="beginnerModeBtn" class="btn-beginner">🐥 초보자 모드: OFF</button>
                 <a href="/test" class="btn-link">🧪 1차 수집기(/test)</a>
                 <div id="healthBadge" class="health-badge">서버 상태 확인 중...</div>
             </div>
@@ -44,6 +45,47 @@
              탭 1: 종목 심층분석 채팅 (collector.py + Dify 챗봇①)
              ======================================================= -->
         <section id="tab-analysis" class="tab-panel active">
+            <!-- 초보자 모드 가이드 (탭 1) -->
+            <div class="beginner-only beginner-guide-box">
+                <h3>🐥 초보자 가이드 · 종목 심층분석이 뭔가요?</h3>
+                <div class="beginner-qa">
+                    <div class="beginner-qa-item">
+                        <strong>🔍 지금 무엇을 하는 건가요?</strong>
+                        회사의 성적표(실적), 가격표(PER/PBR), 최근 뉴스와 공식 공시(DART)를 한 번에 모아 AI 개인 비서(PB)에게 읽히는 과정입니다.
+                    </div>
+                    <div class="beginner-qa-item">
+                        <strong>💡 투자 결정에 어떤 도움을 주나요?</strong>
+                        소문이나 감이 아니라 <strong>"이 회사가 실제로 돈을 잘 벌고 있는지, 지금 주가가 싼 편인지 비싼 편인지"</strong> 숫자로 확인하고 내 평단가에 맞는 대응 전략을 세울 수 있습니다.
+                    </div>
+                </div>
+                <div class="glossary-grid">
+                    <div class="glossary-item">
+                        <div class="glossary-term">PER (주가수익비율)</div>
+                        <div class="glossary-desc">회사가 버는 돈으로 <strong>본전 뽑는 데 걸리는 햇수</strong>예요. 숫자가 낮을수록 주가가 싼 편입니다.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">PBR (주가순자산비율)</div>
+                        <div class="glossary-desc">회사를 당장 팔았을 때 <strong>재산 가치 대비 주가</strong>예요. 1배 미만이면 바겐세일 구간으로 봅니다.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">ROE (자기자본이익률)</div>
+                        <div class="glossary-desc">주주 돈 100원으로 1년에 몇 원을 벌었는지 보여주는 <strong>장사 실력 점수</strong>예요. 높을수록 좋습니다.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">예상(E) / 컨센서스</div>
+                        <div class="glossary-desc">이미 확정된 과거 성적이 아니라, 증권사 전문가들이 <strong>앞으로 이럴 거라고 예측한 미래 성적</strong>이에요.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">외인소진율 · 수급</div>
+                        <div class="glossary-desc">외국인·기관 같은 <strong>큰손 투자자들이 주식을 얼마나 담고 있는지</strong> 보여주는 힘의 흐름입니다.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">DART 공식 공시</div>
+                        <div class="glossary-desc">금융감독원에 회사가 직접 올린 <strong>100% 공식 보고서(배당, 실적, 지분 변동)</strong>입니다.</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="panel-header">
                     <div>
@@ -215,6 +257,43 @@
              탭 2: 리밸런싱 도우미 (Dify 없음 · 순수 Python 계산)
              ======================================================= -->
         <section id="tab-rebalance" class="tab-panel">
+            <!-- 초보자 모드 가이드 (탭 2) -->
+            <div class="beginner-only beginner-guide-box">
+                <h3>🐥 초보자 가이드 · 리밸런싱과 몬테카를로가 뭔가요?</h3>
+                <div class="beginner-qa">
+                    <div class="beginner-qa-item">
+                        <strong>🔍 지금 무엇을 하는 건가요?</strong>
+                        계란을 한 바구니에 담지 않도록, 지난 1년 주가 데이터를 바탕으로 <strong>컴퓨터가 3,000가지 비중 조합을 미리 시험(시뮬레이션)</strong>해서 가장 가성비 좋은 황금 비율을 찾습니다.
+                    </div>
+                    <div class="beginner-qa-item">
+                        <strong>💡 투자 결정에 어떤 도움을 주나요?</strong>
+                        오를 때만 한 종목에 몰빵했다가 폭락 시 크게 다치는 것을 막고, <strong>출렁임(위험)은 줄이면서 수익률은 높이는 안정적인 배분 비율</strong>과 매수 금액을 숫자로 정할 수 있습니다.
+                    </div>
+                </div>
+                <div class="glossary-grid">
+                    <div class="glossary-item">
+                        <div class="glossary-term">리밸런싱 (Rebalancing)</div>
+                        <div class="glossary-desc">시간이 지나 한쪽으로 쏠린 투자 바구니를 <strong>다시 최적의 황금 비율로 맞추어 정리</strong>하는 작업이에요.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">몬테카를로 시뮬레이션</div>
+                        <div class="glossary-desc">주사위를 3,000번 굴려보듯 <strong>수천 가지 투자 비율을 무작위로 조합해 테스트</strong>하는 수학 계산법이에요.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">효율적 프론티어</div>
+                        <div class="glossary-desc">점들이 모인 그래프에서 가장 위쪽 경계선, 즉 <strong>"같은 위험을 감수할 때 수익이 가장 높은 가성비 끝판왕"</strong> 지점들을 말해요.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">샤프지수 (Sharpe Ratio)</div>
+                        <div class="glossary-desc"><strong>내가 감수한 스트레스(변동성) 대비 얼마나 알차게 벌었나</strong>를 뜻하는 가성비 점수예요. 1.0 이상이면 아주 훌륭합니다!</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">최대낙폭 (MDD)</div>
+                        <div class="glossary-desc">가장 비쌀 때 샀다가 최악으로 떨어졌을 때 <strong>계좌가 최대 몇 %까지 녹았는지</strong> 보여주는 방어력 지표예요.</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="panel-header">
                     <div>
@@ -307,6 +386,39 @@
              탭 3: 기술지표 차트 + 채팅 (FDR 계산 + Dify 챗봇③)
              ======================================================= -->
         <section id="tab-technical" class="tab-panel">
+            <!-- 초보자 모드 가이드 (탭 3) -->
+            <div class="beginner-only beginner-guide-box">
+                <h3>🐥 초보자 가이드 · 기술지표 차트는 왜 보나요?</h3>
+                <div class="beginner-qa">
+                    <div class="beginner-qa-item">
+                        <strong>🔍 지금 무엇을 하는 건가요?</strong>
+                        주가의 최근 체력과 시장 분위기(과열 vs 공포)를 수학 공식으로 계산해 그래프로 그리고, 그 숫자를 AI에게 넘겨 쉬운 말로 풀이해 달라고 합니다.
+                    </div>
+                    <div class="beginner-qa-item">
+                        <strong>💡 투자 결정에 어떤 도움을 주나요?</strong>
+                        아무리 좋은 회사라도 너무 비싸게 추격 매수하지 않도록, <strong>"지금 당장 들어가도 될 타이밍인지, 조금 쉬었다 살 타이밍인지"</strong> 매매 타이밍을 잡는 데 참고할 수 있습니다.
+                    </div>
+                </div>
+                <div class="glossary-grid">
+                    <div class="glossary-item">
+                        <div class="glossary-term">이동평균선 (MA 5/20/60)</div>
+                        <div class="glossary-desc">최근 5일·20일·60일간의 <strong>평균 주가를 이은 선</strong>이에요. 단기선(5일)이 장기선(60일) 위에 있으면 <strong>상승 분위기(정배열)</strong>입니다.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">RSI (14일 · 체온계)</div>
+                        <div class="glossary-desc">시장의 열기를 0~100으로 보여줘요. <strong>70 이상은 너무 과열(과매수)</strong>, <strong>30 이하는 너무 얼어붙은 상태(과매도)</strong>를 뜻합니다.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">MACD &amp; Signal</div>
+                        <div class="glossary-desc">단기 힘과 장기 힘의 줄다리기예요. <strong>파란선(MACD)이 주황선(Signal)을 위로 뚫으면</strong> 상승 힘이 붙는 신호(골든크로스)입니다.</div>
+                    </div>
+                    <div class="glossary-item">
+                        <div class="glossary-term">볼린저밴드</div>
+                        <div class="glossary-desc">주가가 평소 다니는 <strong>울타리(도로)</strong>예요. 윗선에 부딪히면 단기 과열, 아랫선 근처면 단기 과매도 구간으로 봅니다.</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="panel-header">
                     <div>

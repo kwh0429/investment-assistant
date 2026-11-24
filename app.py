@@ -262,6 +262,7 @@ def api_chat_analysis():
         code = str(payload.get("code", "")).strip()
         question = str(payload.get("question", "")).strip()
         use_tool = bool(payload.get("use_tool", True))
+        beginner_mode = bool(payload.get("beginner_mode", False))
         conversation_id = str(payload.get("conversation_id") or "").strip()
 
         # 내 평단가 / 수량 (선택 입력)
@@ -327,11 +328,16 @@ def api_chat_analysis():
                 curr_price = (evidence.get("snapshot") or {}).get("current_price")
                 pos_text = _build_position_text(curr_price)
                 compact_json = json.dumps(_compact_evidence(evidence), ensure_ascii=False)
+                beginner_guide = (
+                    "\n[초보자 눈높이 설명 모드 ON]\n"
+                    "어려운 금융 용어(PER, PBR, ROE, 컨센서스, 수급 등)를 사용할 때마다 괄호 안에 일상적인 쉬운 비유(예: '본전 뽑는 데 걸리는 햇수')를 붙여 아주 친절하게 설명해 주세요.\n"
+                    if beginner_mode else ""
+                )
 
                 full_query = (
                     f"당신은 사용자 전담 개인 PB(Private Banker)입니다. 아래 제공된 '{stock_name}({resolved_code})'의 "
                     "실제 수집 데이터(JSON)만을 근거로, 고객을 위한 명확하고 실전적인 심층분석 리포트와 투자 전략을 작성해 주세요.\n"
-                    f"{pos_text}\n"
+                    f"{pos_text}{beginner_guide}\n"
                     "[개인 PB 작성 원칙]\n"
                     "1. '투자는 본인 책임', '상황에 따라 다릅니다' 같은 원론적이고 회피성 멘트는 절대 쓰지 마세요.\n"
                     "2. 데이터에 기반해 현재 포지션 의견(예: 비중 확대 / 보유 유지 / 분할 익절 / 관망 / 손절 주의)을 명확히 제시하세요.\n"
@@ -367,6 +373,7 @@ def api_chat_analysis():
                 "수집된 종목 데이터와 사용자가 말한 평단가/상황을 직접 계산해, "
                 "첫 문장에서 명확한 행동 결론(예: 보유 유지, 분할 매수, 반등 시 비중 축소, 손절 등)을 단호하게 내린 뒤, "
                 "구체적인 수치 근거와 기준 가격(목표가/손절가 라인)을 설명하세요."
+                + ("\n(초보자 모드 ON: 전문 용어마다 쉬운 비유와 한 줄 풀이를 덧붙여 주세요.)" if beginner_mode else "")
             )
 
             if not conversation_id and use_tool and code:
@@ -422,6 +429,7 @@ def api_chat_technical():
 
         code = str(payload.get("code", "")).strip()
         question = str(payload.get("question", "")).strip() or "현재 계산된 이동평균선, RSI, MACD, 볼린저밴드 수치를 초보자가 이해하기 쉽게 설명해 주세요."
+        beginner_mode = bool(payload.get("beginner_mode", False))
         conversation_id = str(payload.get("conversation_id") or "").strip()
         summary = payload.get("latest_summary")
 
@@ -437,13 +445,19 @@ def api_chat_technical():
                 return jsonify({"error": tech_res["errors"][0]}), 400
             summary = tech_res.get("latest_summary", {})
 
+        beginner_tech_note = (
+            " 특히 초보자 모드가 켜져 있으므로 RSI는 '시장의 체온계', 이동평균선은 '평균 기운', "
+            "볼린저밴드는 '주가의 울타리'처럼 일상적인 비유를 사용해 아주 쉽게 설명해 주세요."
+            if beginner_mode else ""
+        )
+
         full_query = (
             "[계산된 최신 기술지표 숫자 (FinanceDataReader 기반)]\n"
             f"종목코드: {code}\n"
             f"{json.dumps(summary, ensure_ascii=False)}\n\n"
             "[지침]\n"
             "오직 위에 제공된 숫자만을 근거로 현재 이동평균선 배열, RSI 수준, MACD 추세, 볼린저밴드 위치를 "
-            "초보자가 이해하기 쉽게 설명하세요. 매수/매도 추천은 하지 마세요.\n\n"
+            f"초보자가 이해하기 쉽게 설명하세요. 매수/매도 추천은 하지 마세요.{beginner_tech_note}\n\n"
             f"[사용자 질문]\n{question}"
         )
 
