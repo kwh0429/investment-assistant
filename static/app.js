@@ -594,9 +594,7 @@ analysisInitForm.addEventListener("submit", async (e) => {
     showGlobalErrors([]);
     analysisConversationId = "";
     analysisEvidenceCard.classList.add("hidden");
-    analysisLoadingText.textContent = useTool
-        ? `'${code}' 네이버 금융·우쎔AI·Serper 수집 및 Dify 개인 PB 분석 중...`
-        : `'${code}' 도구 없이 Dify AI 단독 분석 요청 중...`;
+    analysisLoadingText.textContent = `'${code}' 데이터 분석 중...`;
     analysisLoading.classList.remove("hidden");
     analysisFetchBtn.disabled = true;
 
