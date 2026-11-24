@@ -353,12 +353,12 @@ def api_chat_analysis():
                     "3. 시장 지수(KOSPI/KOSDAQ) 대비 상대강도, 최근 5일 외국인/기관 수급, 증권사 목표주가, 우쎔AI 리포트/DART 공시까지 모두 종합해 판단하세요.\n"
                     "4. 연간/분기 실적에서 `is_consensus: true`인 기간은 확정 실적이 아닌 '증권사 예상치(E)'임을 반드시 구분해 서술하세요.\n"
                     "5. 금액은 조/억 단위로 환산하고, 표·글머리 기호 등 깔끔한 마크다운으로 정리하세요.\n\n"
-                    "[필수 분석 목차]\n"
-                    "### 1. PB 종합 의견 (현재 스탠스 및 핵심 이유 1줄 요약)\n"
-                    "### 2. 시장 대비 수급 및 체급 (KOSPI 대비 흐름, 외인/기관 5일 수급, 시가총액)\n"
-                    "### 3. 실적 성장성과 수익성 (연간·분기 실적 추이, 영업이익률, ROE)\n"
-                    "### 4. 밸류에이션 및 목표주가 괴리율 (현재 PER vs 추정 PER, PBR, 증권사 목표주가)\n"
-                    "### 5. 최신 뉴스·DART 공시 이슈 및 구체적 대응 전략 (지지선·목표가 라인)\n\n"
+                    "[필수 분석 목차 — 각 항목은 핵심 수치 위주로 2~3줄씩 간결하고 밀도 있게 작성]\n"
+                    "### 1. PB 종합 의견 (현재 스탠스 및 핵심 이유)\n"
+                    "### 2. 시장 대비 수급 및 체급 (KOSPI 대비 흐름, 외인/기관 5일 수급)\n"
+                    "### 3. 실적 성장성과 수익성 (연간·분기 실적 추이, ROE)\n"
+                    "### 4. 밸류에이션 및 목표주가 괴리율 (현재 PER vs 추정 PER, 목표주가)\n"
+                    "### 5. 최신 뉴스·DART 공시 이슈 및 대응 전략 (지지선·목표가 라인)\n\n"
                     f"[수집된 근거 데이터 JSON]\n{compact_json}"
                 )
             else:
@@ -515,7 +515,7 @@ def api_daily_pick():
             return jsonify(_DAILY_PICK_CACHE["data"]), 200
 
         logger.info(f"[REQUEST] POST /api/daily-pick (date={today_str}, force_refresh={force_refresh})")
-        candidate_codes = fetch_daily_candidates(limit=4)
+        candidate_codes = fetch_daily_candidates(limit=3)
 
         def _gather_candidate(code):
             ev = collect_stock_data(code)

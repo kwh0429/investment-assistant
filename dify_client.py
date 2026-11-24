@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_DIFY_BASE_URL = "https://api.dify.ai/v1"
 DEFAULT_PRIMARY_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_FALLBACK_MODELS = "gemini-3.1-flash-lite,gemma-4-26b-a4b-it"
-DIFY_TIMEOUT = 8
+DIFY_TIMEOUT = 10
 
 
 def get_gemini_model_chain():
@@ -43,7 +43,7 @@ def call_gemini_with_fallback(prompt):
         }
 
     model_chain = get_gemini_model_chain()
-    client = genai.Client(api_key=gemini_key)
+    client = genai.Client(api_key=gemini_key, http_options={"timeout": 12000})
     last_error = ""
 
     for idx, model_name in enumerate(model_chain):
