@@ -25,7 +25,6 @@ let macdChartInstance = null;
 // =========================================================
 // 공용 DOM 및 유틸리티
 // =========================================================
-const healthBadge = document.getElementById("healthBadge");
 const beginnerModeBtn = document.getElementById("beginnerModeBtn");
 const proModeBtn = document.getElementById("proModeBtn");
 const globalErrorBox = document.getElementById("globalErrorBox");
@@ -205,7 +204,7 @@ function buildChatMarkdown(container, title) {
     msgs.forEach((m) => {
         const isUser = m.classList.contains("user");
         const raw = m.dataset.rawText || m.textContent.trim();
-        lines.push(isUser ? `### 👤 질문\n${raw}\n` : `### 🤖 AI 답변\n${raw}\n\n---`);
+        lines.push(isUser ? `### 질문\n${raw}\n` : `### 리서치 답변\n${raw}\n\n---`);
     });
     return lines.join("\n");
 }
@@ -215,7 +214,7 @@ async function copyChatToClipboard(container, title, btn) {
     try {
         await navigator.clipboard.writeText(md);
         const orig = btn.textContent;
-        btn.textContent = "✅ 복사됨!";
+        btn.textContent = "복사 완료";
         setTimeout(() => { btn.textContent = orig; }, 1500);
     } catch (err) {
         alert("클립보드 복사에 실패했습니다.");
@@ -240,22 +239,10 @@ async function checkServerHealth() {
     try {
         const res = await fetch("/health");
         const data = await res.json();
-        const difyReady = data.dify_analysis_api_configured && data.dify_tech_api_configured;
-
-        if (data.status === "ok" && data.serper_api_configured && difyReady) {
-            healthBadge.textContent = "서버 정상 · Dify 2슬롯 준비됨";
-            healthBadge.className = "health-badge ok";
-        } else if (data.status === "ok") {
-            const missing = [];
-            if (!data.serper_api_configured) missing.push("Serper");
-            if (!data.dify_analysis_api_configured) missing.push("Dify분석");
-            if (!data.dify_tech_api_configured) missing.push("Dify기술");
-            healthBadge.textContent = `서버 정상 · 미설정(${missing.join(", ")})`;
-            healthBadge.className = "health-badge warn";
+        if (data.status !== "ok") {
+            console.warn("[HEALTH] 서버 상태 이상", data);
         }
     } catch (err) {
-        healthBadge.textContent = "서버 연결 실패";
-        healthBadge.className = "health-badge warn";
         console.error("[ERROR] 서버 상태 확인 실패", err);
     }
 }
@@ -527,7 +514,7 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
     } else {
         if (ez && ez.summary) {
             const sumTitle = document.createElement("h4");
-            sumTitle.textContent = "📊 시장 대비 상대강도 & 수급 요약";
+            sumTitle.textContent = "시장 대비 상대강도 & 수급 요약";
             evEzinitBox.appendChild(sumTitle);
 
             const sumEl = document.createElement("p");
@@ -541,8 +528,8 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
             const discTitle = document.createElement("h4");
             discTitle.style.marginTop = "14px";
             discTitle.textContent = dartList.length > 0
-                ? "📑 금융감독원 OpenDART 공식 공시 (최근 90일)"
-                : "📑 최근 DART 주요 공시";
+                ? "금융감독원 OpenDART 공식 공시 (최근 90일)"
+                : "최근 DART 주요 공시";
             evEzinitBox.appendChild(discTitle);
 
             disclosuresToShow.forEach((d) => {
@@ -565,7 +552,7 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
 
     const peerBlock = document.createElement("div");
     peerBlock.className = "evidence-block";
-    peerBlock.innerHTML = "<h4>🏢 동일업종 경쟁사 시세</h4>";
+    peerBlock.innerHTML = "<h4>동종 업계 시세</h4>";
     if (peers.length === 0) {
         peerBlock.innerHTML += '<p class="muted-text">비교 종목 정보 없음</p>';
     } else {
@@ -579,7 +566,7 @@ function renderEvidenceDashboard(evidence, useTool, userPos = null) {
 
     const resBlock = document.createElement("div");
     resBlock.className = "evidence-block";
-    resBlock.innerHTML = "<h4>📝 증권사 최신 리포트</h4>";
+    resBlock.innerHTML = "<h4>증권사 최신 리포트</h4>";
     if (researches.length === 0) {
         resBlock.innerHTML += '<p class="muted-text">최신 리포트 없음</p>';
     } else {
@@ -702,7 +689,7 @@ analysisChatForm.addEventListener("submit", async (e) => {
     appendChatMessage(analysisChatBox, "user", question);
     analysisQuestionInput.value = "";
 
-    const loadingMsg = appendChatMessage(analysisChatBox, "bot loading", "Dify 챗봇①이 답변 작성 중...");
+    const loadingMsg = appendChatMessage(analysisChatBox, "bot loading", "답변을 정리하고 있습니다...");
     analysisSendBtn.disabled = true;
 
     try {
@@ -724,7 +711,7 @@ analysisChatForm.addEventListener("submit", async (e) => {
 
         if (!res.ok) {
             showGlobalErrors([data.error || "답변 생성에 실패했습니다."]);
-            appendChatMessage(analysisChatBox, "bot", `⚠️ 오류: ${data.error || "요청 실패"}`);
+            appendChatMessage(analysisChatBox, "bot", `오류: ${data.error || "요청 실패"}`);
             console.error("[ERROR] 탭1 후속 채팅 오류", data.error);
             return;
         }
@@ -1143,7 +1130,7 @@ techChatForm.addEventListener("submit", async (e) => {
     appendChatMessage(techChatBox, "user", question);
     techQuestionInput.value = "";
 
-    const loadingMsg = appendChatMessage(techChatBox, "bot loading", "계산된 지표를 주입해 Dify 챗봇③이 설명 생성 중...");
+    const loadingMsg = appendChatMessage(techChatBox, "bot loading", "지표 데이터를 분석하고 있습니다...");
     techSendBtn.disabled = true;
 
     try {
@@ -1164,7 +1151,7 @@ techChatForm.addEventListener("submit", async (e) => {
 
         if (!res.ok) {
             showGlobalErrors([data.error || "기술지표 설명 요청에 실패했습니다."]);
-            appendChatMessage(techChatBox, "bot", `⚠️ 오류: ${data.error || "요청 실패"}`);
+            appendChatMessage(techChatBox, "bot", `오류: ${data.error || "요청 실패"}`);
             console.error("[ERROR] 탭3 챗봇 오류", data.error);
             return;
         }
@@ -1216,7 +1203,7 @@ function applyBeginnerMode(enabled) {
     localStorage.setItem("beginnerMode", enabled ? "true" : "false");
     document.body.classList.toggle("beginner-mode", enabled);
     beginnerModeBtn.classList.toggle("active", enabled);
-    beginnerModeBtn.textContent = enabled ? "🐥 초보자 모드: ON" : "🐥 초보자 모드: OFF";
+    beginnerModeBtn.textContent = enabled ? "초보자 모드 ON" : "초보자 모드";
     if (enabled && isProMode) {
         applyProMode(false);
     }
@@ -1227,7 +1214,7 @@ function applyProMode(enabled) {
     localStorage.setItem("proMode", enabled ? "true" : "false");
     document.body.classList.toggle("pro-mode", enabled);
     proModeBtn.classList.toggle("active", enabled);
-    proModeBtn.textContent = enabled ? "🎓 전문가 모드: ON" : "🎓 전문가 모드: OFF";
+    proModeBtn.textContent = enabled ? "전문가 모드 ON" : "전문가 모드";
     if (enabled && isBeginnerMode) {
         applyBeginnerMode(false);
     }
